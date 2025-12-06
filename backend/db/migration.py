@@ -42,7 +42,9 @@ CREATE TABLE IF NOT EXISTS places (
     creatAt timestamp,
     creatorId int,
     changeAt timestamp,
-    changeId int
+    changeId int,
+    distance_to_center double precision,
+    is_moderated bool default false
 );
     
 CREATE TABLE IF NOT EXISTS places_type (
@@ -160,27 +162,27 @@ CREATE TABLE IF NOT EXISTS admins (
             conn.close()
 
 
-def migration_down():
-    conn = db_connection()
-    cur = conn.cursor()
-    try:
-        drop = sql.SQL("""DROP TABLE IF EXISTS admins, places, places_type, product,
-                            product_type, reklama, reklama_type, reviews, sport_type, sport_interfaces,
-                            sport_interfaces_place, food_type;""")
-
-        cur.execute(drop)
-        conn.commit()
-    except (Exception, psycopg2.DatabaseError) as error:
-        return error
-    finally:
-        if conn:
-            cur.close()
-            conn.close()
+# def migration_down():
+#     conn = db_connection()
+#     cur = conn.cursor()
+#     try:
+#         drop = sql.SQL("""DROP TABLE IF EXISTS admins, places, places_type, product,
+#                             product_type, reklama, reklama_type, reviews, sport_type, sport_interfaces,
+#                             sport_interfaces_place, food_type;""")
+#
+#         cur.execute(drop)
+#         conn.commit()
+#     except (Exception, psycopg2.DatabaseError) as error:
+#         return error
+#     finally:
+#         if conn:
+#             cur.close()
+#             conn.close()
 
 
 
 
 
 if __name__ == "__main__":
-    migration_down()
+    # migration_down()
     migration_up()

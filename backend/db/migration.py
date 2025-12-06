@@ -110,7 +110,9 @@ CREATE TABLE IF NOT EXISTS users (
     rating int default 100,
     isBanned bool default false,
     bannedTo int,
-    bannedAt timestamp
+    bannedAt timestamp,
+    phone varchar,
+    photo varchar
 );
 
 CREATE TABLE IF NOT EXISTS reviews (
@@ -131,6 +133,25 @@ CREATE TABLE IF NOT EXISTS admins (
 """)
 
         cur.execute(create)
+        
+        # Добавляем поля phone и photo к существующей таблице users, если их нет
+        try:
+            cur.execute("""
+                DO $$ 
+                BEGIN
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                                   WHERE table_name='users' AND column_name='phone') THEN
+                        ALTER TABLE users ADD COLUMN phone varchar;
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                                   WHERE table_name='users' AND column_name='photo') THEN
+                        ALTER TABLE users ADD COLUMN photo varchar;
+                    END IF;
+                END $$;
+            """)
+        except Exception as e:
+            # Игнорируем ошибки, если поля уже существуют
+            pass
         
         conn.commit()
     except (Exception, psycopg2.DatabaseError) as error:

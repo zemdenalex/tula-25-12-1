@@ -374,6 +374,7 @@ returning id;
             logger.info('Database connection closed.')
 
 
+
 async def calculate_health_rating(place_id: int) -> int:
     """
     Вычисляет рейтинг здорового места (0-100) на основе различных критериев

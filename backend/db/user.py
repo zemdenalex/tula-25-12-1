@@ -89,8 +89,8 @@ async def login_user(email: str, password: str) -> int:
             logger.info('Database connection closed.')
 
 
-async def add_review(message: str, user_id: int, place_id: int) -> bool:
-    """Добавляет отзыв. Возвращает True при успехе, False при ошибке"""
+async def add_review(message: str, user_id: int, place_id: int, rating: int, photo_urls: list = None) -> bool:
+    """Добавляет отзыв с рейтингом и фото. Возвращает True при успехе, False при ошибке"""
     connection = db_connection()
     cursor = connection.cursor()
 
@@ -111,12 +111,28 @@ async def add_review(message: str, user_id: int, place_id: int) -> bool:
         if not message or not message.strip():
             return False
 
+        # Проверяем рейтинг (должен быть от 1 до 5)
+        if rating < 1 or rating > 5:
+            return False
+
         # Добавляем отзыв
         query = sql.SQL("""
-            INSERT INTO reviews (idUser, idPlace, text)
-            VALUES (%s, %s, %s)
+            INSERT INTO reviews (idUser, idPlace, text, rating)
+            VALUES (%s, %s, %s, %s)
+            RETURNING id
         """)
-        cursor.execute(query, (user_id, place_id, message.strip()))
+        cursor.execute(query, (user_id, place_id, message.strip(), rating))
+        
+        review_id = cursor.fetchone()[0]
+        
+        # Добавляем фото, если они есть
+        if photo_urls:
+            photo_query = sql.SQL("""
+                INSERT INTO reviews_photo (review_id, url)
+                VALUES (%s, %s)
+            """)
+            for photo_url in photo_urls:
+                cursor.execute(photo_query, (review_id, photo_url))
         
         connection.commit()
         return True
@@ -237,6 +253,100 @@ async def delete_review(user_id: int, review_id: int) -> str:
         logger.error(error)
         connection.rollback()
         return 'error'
+    finally:
+        if connection:
+            cursor.close()
+            connection.close()
+            logger.info('Database connection closed.')
+
+
+async def set_review_rank(user_id: int, review_id: int, like: bool = None, dislike: bool = None) -> bool:
+    """Устанавливает лайк или дизлайк на отзыв. Возвращает True при успехе, False при ошибке"""
+    connection = db_connection()
+    cursor = connection.cursor()
+
+    try:
+        # Проверяем, что передан хотя бы один параметр
+        if like is None and dislike is None:
+            return False
+
+        # Проверяем, что не переданы оба параметра одновременно как True
+        if like is True and dislike is True:
+            return False
+
+        # Проверяем, существует ли отзыв
+        check_review = sql.SQL("SELECT id FROM reviews WHERE id = %s")
+        cursor.execute(check_review, (review_id,))
+        if not cursor.fetchone():
+            return False
+
+        # Проверяем, существует ли пользователь
+        check_user = sql.SQL("SELECT id FROM users WHERE id = %s")
+        cursor.execute(check_user, (user_id,))
+        if not cursor.fetchone():
+            return False
+
+        # Проверяем, существует ли уже запись для этого пользователя и отзыва
+        check_existing = sql.SQL("""
+            SELECT id, "like", dislike FROM reviews_ranks 
+            WHERE review_id = %s AND user_id = %s
+        """)
+        cursor.execute(check_existing, (review_id, user_id))
+        existing = cursor.fetchone()
+
+        if like is True:
+            if existing:
+                existing_id, existing_like, existing_dislike = existing
+                if existing_like:
+                    # Если уже стоит like, удаляем запись
+                    delete_query = sql.SQL("DELETE FROM reviews_ranks WHERE id = %s")
+                    cursor.execute(delete_query, (existing_id,))
+                elif existing_dislike:
+                    # Если стоит dislike, меняем на like
+                    update_query = sql.SQL("""
+                        UPDATE reviews_ranks 
+                        SET "like" = true, dislike = false 
+                        WHERE id = %s
+                    """)
+                    cursor.execute(update_query, (existing_id,))
+            else:
+                # Создаем новую запись с like
+                insert_query = sql.SQL("""
+                    INSERT INTO reviews_ranks (review_id, user_id, "like", dislike)
+                    VALUES (%s, %s, true, false)
+                """)
+                cursor.execute(insert_query, (review_id, user_id))
+
+        elif dislike is True:
+            if existing:
+                existing_id, existing_like, existing_dislike = existing
+                if existing_dislike:
+                    # Если уже стоит dislike, удаляем запись
+                    delete_query = sql.SQL("DELETE FROM reviews_ranks WHERE id = %s")
+                    cursor.execute(delete_query, (existing_id,))
+                elif existing_like:
+                    # Если стоит like, меняем на dislike
+                    update_query = sql.SQL("""
+                        UPDATE reviews_ranks 
+                        SET "like" = false, dislike = true 
+                        WHERE id = %s
+                    """)
+                    cursor.execute(update_query, (existing_id,))
+            else:
+                # Создаем новую запись с dislike
+                insert_query = sql.SQL("""
+                    INSERT INTO reviews_ranks (review_id, user_id, "like", dislike)
+                    VALUES (%s, %s, false, true)
+                """)
+                cursor.execute(insert_query, (review_id, user_id))
+
+        connection.commit()
+        return True
+
+    except (Exception, psycopg2.DatabaseError) as error:
+        logger.error(error)
+        connection.rollback()
+        return False
     finally:
         if connection:
             cursor.close()

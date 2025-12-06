@@ -1,17 +1,21 @@
 import json
 import time
+import logging
 from datetime import datetime, timedelta
 
-from fastapi import FastAPI, HTTPException, APIRouter, Request, Response, Query
+from fastapi import FastAPI, HTTPException, APIRouter, Request, Response, Query, File, UploadFile, Request
+from fastapi import Request as FastAPIRequest
 from starlette.middleware.cors import CORSMiddleware as cors
 
 import os
 from db.map import get_all_places, add_place, get_all_types, get_place, update_place_info
-from db.user import create_user, login_user, add_review, get_all_users, get_user_by_id, delete_review
+from db.user import create_user, login_user, add_review, get_all_users, get_user_by_id, delete_review, set_review_rank
+from s3_client import upload_photo
 
 from typing import Dict, Any, Optional, List
-from typing import Dict, Any, Optional, List
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(root_path="/api")
 
@@ -39,7 +43,8 @@ app.add_middleware(
 
 
 @app.options("/{path:path}")
-async def options_route(path: str):
+async def options_route(path: str, request: Request):
+    """Обработка OPTIONS запросов для CORS"""
     return Response(status_code=204)
 
 
@@ -75,6 +80,9 @@ class reviewData(BaseModel):
     user_name: Optional[str] = None
     id_place: Optional[int] = None
     text: Optional[str] = None
+    review_photos: List[str] = []
+    like: Optional[int] = 0
+    dislike: Optional[int] = 0
 
 
 class placeData(BaseModel):
@@ -196,6 +204,8 @@ class UserReviewData(BaseModel):
     message: str
     user_id: int
     place_id: int
+    rating: int
+    photos: Optional[List[str]] = None
 
 
 class UserResponseData(BaseModel):
@@ -210,6 +220,13 @@ class UserResponseData(BaseModel):
 class UserDeleteReviewData(BaseModel):
     user_id: int
     review_id: int
+
+
+class ReviewRankData(BaseModel):
+    user_id: int
+    review_id: int
+    like: Optional[bool] = None
+    dislike: Optional[bool] = None
 
 
 @user_router.post("/create")
@@ -232,12 +249,18 @@ async def login_user_h(data: UserLoginData) -> dict:
 
 @user_router.post("/review")
 async def add_review_h(data: UserReviewData):
-    """Добавляет отзыв"""
+    """Добавляет отзыв с рейтингом и опциональными фото"""
     # Проверяем, что сообщение не пустое
     if not data.message or not data.message.strip():
         raise HTTPException(status_code=418, detail="isNoGoodMessage")
     
-    result = await add_review(data.message, data.user_id, data.place_id)
+    # Проверяем рейтинг (должен быть от 1 до 5)
+    if data.rating < 1 or data.rating > 5:
+        raise HTTPException(status_code=400, detail="Rating must be between 1 and 5")
+    
+    # Добавляем отзыв в БД с фото, если они есть
+    photo_urls = data.photos if data.photos else None
+    result = await add_review(data.message, data.user_id, data.place_id, data.rating, photo_urls)
     if not result:
         raise HTTPException(status_code=400, detail="error")
     return {"status": "ok"}
@@ -271,3 +294,83 @@ async def delete_review_h(data: UserDeleteReviewData):
 
 
 app.include_router(user_router, prefix="/user", tags=["user"])
+
+# Review rank router
+review_router = APIRouter()
+
+
+@review_router.post("/rank")
+async def set_review_rank_h(data: ReviewRankData):
+    """Устанавливает лайк или дизлайк на отзыв"""
+    try:
+        # Проверяем, что передан хотя бы один параметр
+        if data.like is None and data.dislike is None:
+            raise HTTPException(status_code=400, detail="Either like or dislike must be provided")
+        
+        # Проверяем, что не переданы оба параметра одновременно как True
+        if data.like is True and data.dislike is True:
+            raise HTTPException(status_code=400, detail="Cannot set both like and dislike to true")
+        
+        result = await set_review_rank(data.user_id, data.review_id, data.like, data.dislike)
+        if not result:
+            logger.error(f"Failed to set review rank: user_id={data.user_id}, review_id={data.review_id}, like={data.like}, dislike={data.dislike}")
+            raise HTTPException(status_code=400, detail="error")
+        return {"status": "ok"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in set_review_rank_h: {e}")
+        raise HTTPException(status_code=400, detail=f"error: {str(e)}")
+
+
+app.include_router(review_router, prefix="/review", tags=["review"])
+
+# Photo router
+photo_router = APIRouter()
+
+
+@photo_router.post("/upload")
+async def upload_photo_h(request: FastAPIRequest):
+    """Загружает фото в MinIO и возвращает presigned URL для просмотра"""
+    try:
+        # Читаем бинарные данные из тела запроса
+        file_data = await request.body()
+        
+        if not file_data:
+            raise HTTPException(status_code=400, detail="No file data provided")
+        
+        # Определяем расширение файла из Content-Type заголовка
+        content_type = request.headers.get("content-type", "").lower()
+        
+        # Маппинг MIME типов в расширения файлов
+        mime_to_extension = {
+            "image/png": "png",
+            "image/jpeg": "jpg",
+            "image/jpg": "jpg",
+            "image/gif": "gif",
+            "image/webp": "webp",
+            "image/bmp": "bmp",
+            "image/svg+xml": "svg",
+        }
+        
+        # Определяем расширение из Content-Type или используем jpg по умолчанию
+        file_extension = mime_to_extension.get(content_type, "jpg")
+        
+        # Загружаем в MinIO и получаем URL
+        photo_url = upload_photo(file_data, file_extension)
+        
+        return {"url": photo_url}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error uploading photo: {e}")
+        raise HTTPException(status_code=400, detail=f"Error uploading photo: {str(e)}")
+
+
+@photo_router.options("/upload")
+async def upload_photo_options():
+    """Обработка OPTIONS запроса для CORS"""
+    return Response(status_code=204)
+
+
+app.include_router(photo_router, prefix="/photo", tags=["photo"])

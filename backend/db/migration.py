@@ -42,7 +42,9 @@ CREATE TABLE IF NOT EXISTS places (
     creatAt timestamp,
     creatorId int,
     changeAt timestamp,
-    changeId int
+    changeId int,
+    distance_to_center double precision,
+    is_moderated bool default false
 );
     
 CREATE TABLE IF NOT EXISTS places_type (
@@ -201,5 +203,5 @@ def migration_down():
 
 
 if __name__ == "__main__":
-    migration_down()
+    # migration_down()
     migration_up()

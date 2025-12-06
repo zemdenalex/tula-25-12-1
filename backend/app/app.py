@@ -6,7 +6,7 @@ from fastapi import FastAPI, HTTPException, APIRouter, Request, Response
 from starlette.middleware.cors import CORSMiddleware as cors
 
 import os
-from backend.db.map import get_all_places, add_place, get_all_types
+from db.map import get_all_places, add_place, get_all_types
 
 from typing import Dict, Any
 from pydantic import BaseModel

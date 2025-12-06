@@ -18,7 +18,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     environment:
-      DATABASE_URL: postgres://postgres:postgres@db:5432/postgres
+      DATABASE_URL: postgres://root:1234@postgres:5432/postgres
     depends_on:
       postgres:
         condition: service_healthy

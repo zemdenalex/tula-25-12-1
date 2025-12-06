@@ -142,6 +142,7 @@ class placeResponseData(BaseModel):
     sport_type: Optional[str] = None
     distance_to_center: Optional[float] = None
     is_moderated: Optional[bool] = None
+    review_rank: Optional[float] = None
     products: list[productData] = []
     equipment: list[equipmentData] = []
     ads: list[adsData] = []

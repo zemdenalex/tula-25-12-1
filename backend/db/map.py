@@ -136,12 +136,22 @@ LEFT JOIN sport_type st ON st.id = p.sporttype;
                 }
                 sports.append(sport)
 
+            # Получаем средний рейтинг отзывов для этого места
+            query_review_rank = sql.SQL("""
+                SELECT COALESCE(AVG(rating)::numeric(10,2), 0)
+                FROM reviews 
+                WHERE idPlace = %s AND rating IS NOT NULL
+            """)
+            cursor.execute(query_review_rank, (id,))
+            review_rank_row = cursor.fetchone()
+            review_rank = float(review_rank_row[0]) if review_rank_row[0] is not None else 0.0
+
             place = {"id": row[0], "name": row[1], "coord1": row[2], "coord2": row[3],
                      "type": row[4], "food_type": row[5], "is_alcohol": row[6],
                      "is_health": row[7], "is_insurance": row[8], "is_nosmoking": row[9],
                      "is_smoke": row[10], "rating": row[11], "sport_type": row[12], "info": row[13], "products": products,
                      "ads": ads,
-                     "reviews": reviews, "equipment": sports}
+                     "reviews": reviews, "equipment": sports, "review_rank": review_rank}
             places.append(place)
         return places
 
@@ -267,12 +277,22 @@ LEFT JOIN sport_type st ON st.id = p.sporttype WHERE p.id = %s;
             }
             sports.append(sport)
 
+        # Получаем средний рейтинг отзывов для этого места
+        query_review_rank = sql.SQL("""
+            SELECT COALESCE(AVG(rating)::numeric(10,2), 0)
+            FROM reviews 
+            WHERE idPlace = %s AND rating IS NOT NULL
+        """)
+        cursor.execute(query_review_rank, (id,))
+        review_rank_row = cursor.fetchone()
+        review_rank = float(review_rank_row[0]) if review_rank_row[0] is not None else 0.0
+
         place = {"id": row[0], "name": row[1], "coord1": row[2], "coord2": row[3],
                  "type": row[4], "food_type": row[5], "is_alcohol": row[6],
                  "is_health": row[7], "is_insurance": row[8], "is_nosmoking": row[9],
                  "is_smoke": row[10], "rating": row[11], "sport_type": row[12], "info": row[13], "products": products,
                  "ads": ads,
-                 "reviews": reviews, "equipment": sports}
+                 "reviews": reviews, "equipment": sports, "review_rank": review_rank}
 
         return place
 
@@ -779,12 +799,37 @@ WHERE p.coord1 IS NOT NULL AND p.coord2 IS NOT NULL
             rows_review = cursor.fetchall()
             reviews = []
             for row_r in rows_review:
+                review_id = row_r[0]
+                # Получаем фото для этого отзыва
+                query_photos = sql.SQL("""
+                    SELECT url FROM reviews_photo WHERE review_id = %s
+                """)
+                cursor.execute(query_photos, (review_id,))
+                rows_photos = cursor.fetchall()
+                review_photos = [row_photo[0] for row_photo in rows_photos]
+                
+                # Получаем количество лайков и дизлайков
+                query_ranks = sql.SQL("""
+                    SELECT 
+                        COUNT(*) FILTER (WHERE "like" = true) as like_count,
+                        COUNT(*) FILTER (WHERE dislike = true) as dislike_count
+                    FROM reviews_ranks 
+                    WHERE review_id = %s
+                """)
+                cursor.execute(query_ranks, (review_id,))
+                ranks_row = cursor.fetchone()
+                like_count = ranks_row[0] if ranks_row else 0
+                dislike_count = ranks_row[1] if ranks_row else 0
+                
                 review = {
-                    "id": row_r[0],
+                    "id": review_id,
                     "id_user": row_r[1],
                     "user_name": row_r[2],
                     "id_place": row_r[3],
                     "text": row_r[4],
+                    "review_photos": review_photos,
+                    "like": like_count,
+                    "dislike": dislike_count,
                 }
                 reviews.append(review)
 
@@ -804,12 +849,22 @@ WHERE p.coord1 IS NOT NULL AND p.coord2 IS NOT NULL
                     }
                     sports.append(sport)
 
+            # Получаем средний рейтинг отзывов для этого места
+            query_review_rank = sql.SQL("""
+                SELECT COALESCE(AVG(rating)::numeric(10,2), 0)
+                FROM reviews 
+                WHERE idPlace = %s AND rating IS NOT NULL
+            """)
+            cursor.execute(query_review_rank, (id,))
+            review_rank_row = cursor.fetchone()
+            review_rank = float(review_rank_row[0]) if review_rank_row[0] is not None else 0.0
+
             place = {"id": row[0], "name": row[1], "coord1": row[2], "coord2": row[3],
                      "type": row[4], "food_type": row[5], "is_alcohol": row[6],
                      "is_health": row[7], "is_insurance": row[8], "is_nosmoking": row[9],
                      "is_smoke": row[10], "rating": row[11], "sport_type": row[12], "info": row[13],
                      "distance_to_center": row[14], "is_moderated": row[15],
-                     "reviews": reviews}
+                     "reviews": reviews, "review_rank": review_rank}
             
             # Добавляем поля только если они загружены
             if need_products is True:

@@ -10,9 +10,12 @@ from starlette.middleware.cors import CORSMiddleware as cors
 import os
 
 from db.map import get_all_places, add_place, get_all_types, get_place, search_places, update_place
-from db.map import get_all_places, add_place, get_all_types, get_place, update_place_info
+from db.map import get_all_places, add_place, get_all_types, get_place
 from db.user import create_user, login_user, add_review, get_all_users, get_user_by_id, delete_review, set_review_rank
 from s3_client import upload_photo
+from db.map import get_all_places, add_place, get_all_types, get_place
+from db.user import create_user, login_user, add_review, get_all_users, get_user_by_id, delete_review
+from db.admin import create_admin, login_admin, update_user_rating, verify_place, ban_user, delete_review_admin
 
 
 from typing import Dict, Any, Optional, List
@@ -306,15 +309,13 @@ async def login_user_h(data: UserLoginData) -> dict:
 
 @user_router.post("/review")
 async def add_review_h(data: UserReviewData):
-    """Добавляет отзыв с рейтингом и опциональными фото"""
-    # Проверяем, что сообщение не пустое
     if not data.message or not data.message.strip():
         raise HTTPException(status_code=418, detail="isNoGoodMessage")
     
     # Проверяем рейтинг (должен быть от 1 до 5)
     if data.rating < 1 or data.rating > 5:
         raise HTTPException(status_code=400, detail="Rating must be between 1 and 5")
-    
+
     # Добавляем отзыв в БД с фото, если они есть
     photo_urls = data.photos if data.photos else None
     result = await add_review(data.message, data.user_id, data.place_id, data.rating, photo_urls)
@@ -363,11 +364,11 @@ async def set_review_rank_h(data: ReviewRankData):
         # Проверяем, что передан хотя бы один параметр
         if data.like is None and data.dislike is None:
             raise HTTPException(status_code=400, detail="Either like or dislike must be provided")
-        
+
         # Проверяем, что не переданы оба параметра одновременно как True
         if data.like is True and data.dislike is True:
             raise HTTPException(status_code=400, detail="Cannot set both like and dislike to true")
-        
+
         result = await set_review_rank(data.user_id, data.review_id, data.like, data.dislike)
         if not result:
             logger.error(f"Failed to set review rank: user_id={data.user_id}, review_id={data.review_id}, like={data.like}, dislike={data.dislike}")
@@ -392,13 +393,13 @@ async def upload_photo_h(request: FastAPIRequest):
     try:
         # Читаем бинарные данные из тела запроса
         file_data = await request.body()
-        
+
         if not file_data:
             raise HTTPException(status_code=400, detail="No file data provided")
-        
+
         # Определяем расширение файла из Content-Type заголовка
         content_type = request.headers.get("content-type", "").lower()
-        
+
         # Маппинг MIME типов в расширения файлов
         mime_to_extension = {
             "image/png": "png",
@@ -409,13 +410,13 @@ async def upload_photo_h(request: FastAPIRequest):
             "image/bmp": "bmp",
             "image/svg+xml": "svg",
         }
-        
+
         # Определяем расширение из Content-Type или используем jpg по умолчанию
         file_extension = mime_to_extension.get(content_type, "jpg")
-        
+
         # Загружаем в MinIO и получаем URL
         photo_url = upload_photo(file_data, file_extension)
-        
+
         return {"url": photo_url}
     except HTTPException:
         raise
@@ -431,3 +432,90 @@ async def upload_photo_options():
 
 
 app.include_router(photo_router, prefix="/photo", tags=["photo"])
+
+# Admin router
+admin_router = APIRouter()
+
+
+class AdminCreateData(BaseModel):
+    id_invite: int
+    name: str
+    email: str
+    password: str
+
+
+class AdminLoginData(BaseModel):
+    email: str
+    pwd: str
+
+
+class AdminUpdateUserData(BaseModel):
+    id_user: int
+    rating: int
+
+
+class AdminVerifyPlaceData(BaseModel):
+    id_place: int
+    verify: bool
+
+
+class AdminDeleteReviewData(BaseModel):
+    id_review: int
+    rating: Optional[int] = None
+
+
+@admin_router.post("/create")
+async def create_admin_h(data: AdminCreateData) -> dict:
+    """Создает нового админа другим админом"""
+    admin_id = await create_admin(data.id_invite, data.name, data.email, data.password)
+    if admin_id is None:
+        raise HTTPException(status_code=400, detail="Admin creation failed: invite admin not found or email already exists")
+    return {"id": admin_id}
+
+
+@admin_router.post("/login")
+async def login_admin_h(data: AdminLoginData) -> dict:
+    """Вход в учетную запись админа"""
+    admin_id = await login_admin(data.email, data.pwd)
+    if admin_id is None:
+        raise HTTPException(status_code=400, detail="Invalid email or password")
+    return {"id": admin_id}
+
+
+@admin_router.put("/user")
+async def update_user_rating_h(data: AdminUpdateUserData) -> dict:
+    """Уменьшает/увеличивает рейтинг пользователя"""
+    result = await update_user_rating(data.id_user, data.rating)
+    if not result:
+        raise HTTPException(status_code=400, detail="User not found or update failed")
+    return {}
+
+
+@admin_router.put("/place")
+async def verify_place_h(data: AdminVerifyPlaceData) -> dict:
+    """Помечает поле верификации места значением параметра"""
+    result = await verify_place(data.id_place, data.verify)
+    if not result:
+        raise HTTPException(status_code=400, detail="Place not found or update failed")
+    return {}
+
+
+@admin_router.delete("/user/{id}")
+async def ban_user_h(id: int) -> dict:
+    """Забанить юзера, установить соответствующие параметры в БД"""
+    result = await ban_user(id)
+    if not result:
+        raise HTTPException(status_code=400, detail="User not found or ban failed")
+    return {}
+
+
+@admin_router.delete("/review")
+async def delete_review_admin_h(data: AdminDeleteReviewData) -> dict:
+    """Удалить отзыв на место, с возможностью (не обязательной) изменить рейтинг авто"""
+    result = await delete_review_admin(data.id_review, data.rating)
+    if not result:
+        raise HTTPException(status_code=400, detail="Review not found or delete failed")
+    return {}
+
+
+app.include_router(admin_router, prefix="/admin", tags=["admin"])

@@ -9,6 +9,7 @@ import os
 from db.map import get_all_places, add_place, get_all_types
 
 from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List
 from pydantic import BaseModel
 
 app = FastAPI(root_path="/api")

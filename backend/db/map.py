@@ -27,7 +27,7 @@ async def get_all_places() -> list:
     try:
         query = sql.SQL("""
 SELECT p.id, p.name, p.coord1, p.coord2, pt.type, ft.type,
-    p.isalcohol, p.ishealth, p.isinsurence, p.isnosmoking, p.issmoke, p.rating, st.name, p.info
+    p.isalcohol, p.ishealth, p.isinsurence, p.isnosmoking, p.issmoke, p.rating, st.type, p.info
 FROM places p
 LEFT JOIN places_type pt ON p.type = pt.id
 LEFT JOIN food_type ft ON p.foodtype = ft.id
@@ -182,7 +182,7 @@ SELECT id, type from places_type
         out['equipment_type'] = places
 
         query = sql.SQL("""
-        SELECT id, name from sport_type 
+        SELECT id, type from sport_type 
                 """)
         cursor.execute(query)
 

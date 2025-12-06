@@ -85,8 +85,8 @@ name varchar
 );
 
 CREATE TABLE IF NOT EXISTS sport_type (
-id serial PRIMARY KEY,
-name varchar
+    id serial PRIMARY KEY,
+    type varchar
 );
 
 CREATE TABLE IF NOT EXISTS sport_interfaces (
@@ -129,6 +129,26 @@ CREATE TABLE IF NOT EXISTS admins (
 """)
 
         cur.execute(create)
+        
+        # Миграция для изменения структуры sport_type, если таблица уже существует со старой структурой
+        migrate_sport_type = sql.SQL("""
+DO $$
+BEGIN
+    -- Проверяем, существует ли колонка 'name' в sport_type
+    IF EXISTS (
+        SELECT 1 
+        FROM information_schema.columns 
+        WHERE table_name = 'sport_type' 
+        AND column_name = 'name'
+    ) THEN
+        -- Переименовываем колонку name в type
+        ALTER TABLE sport_type RENAME COLUMN name TO type;
+    END IF;
+END $$;
+""")
+        
+        cur.execute(migrate_sport_type)
+        
         conn.commit()
     except (Exception, psycopg2.DatabaseError) as error:
         return error

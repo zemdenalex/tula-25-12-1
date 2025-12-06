@@ -8,7 +8,7 @@ from starlette.middleware.cors import CORSMiddleware as cors
 import os
 from db.map import get_all_places, add_place, get_all_types
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from pydantic import BaseModel
 
 app = FastAPI(root_path="/api")
@@ -45,23 +45,33 @@ place_router = APIRouter()
 
 
 class productData(BaseModel):
-    type: int
-    name: Optional[str] = None
-    min_cost: int
-    is_health: bool
-    is_alcohol: bool
-    is_smoking: bool
+    id: Optional[int] = None
+    type: Optional[str] = None
+    name: str
+    min_cost: Optional[float] = None
+    is_health: Optional[bool] = None
+    is_alcohol: Optional[bool] = None
+    is_smoking: Optional[bool] = None
 
 
 class equipmentData(BaseModel):
-    type: int
-    count: int
+    name: Optional[str] = None
+    count: Optional[int] = None
 
 
 class adsData(BaseModel):
-    type: int
+    id: Optional[int] = None
+    type: Optional[str] = None
     name: str
-    is_health: bool
+    is_health: Optional[bool] = None
+
+
+class reviewData(BaseModel):
+    id: Optional[int] = None
+    id_user: Optional[int] = None
+    user_name: Optional[str] = None
+    id_place: Optional[int] = None
+    text: Optional[str] = None
 
 
 class placeData(BaseModel):
@@ -83,7 +93,28 @@ class placeData(BaseModel):
     ads: Optional[list[equipmentData]] = None
 
 
-@place_router.get("/")
+class placeResponseData(BaseModel):
+    id: Optional[int] = None
+    name: Optional[str] = None
+    info: Optional[str] = None
+    coord1: float
+    coord2: float
+    type: Optional[str] = None
+    food_type: Optional[str] = None
+    is_alcohol: Optional[bool] = None
+    is_health: Optional[bool] = None
+    is_insurance: Optional[bool] = None
+    is_nosmoking: Optional[bool] = None
+    is_smoke: Optional[bool] = None
+    rating: Optional[int] = None
+    sport_type: Optional[str] = None
+    products: list[productData] = []
+    equipment: list[equipmentData] = []
+    ads: list[adsData] = []
+    reviews: list[reviewData] = []
+
+
+@place_router.get("/", response_model=List[placeResponseData])
 async def get_all_points_h():
     all_points = await get_all_places()
     if not all_points:
@@ -97,7 +128,6 @@ async def get_all_types_h():
     if not all_types:
         raise HTTPException(status_code=418, detail="i am a teapot ;)")
     return all_types
-
 
 @place_router.post("/")
 async def add_point_h(data: placeData) -> int:

@@ -72,7 +72,7 @@ LEFT JOIN sport_type st ON st.id = p.sporttype;
                     "id": row_a[0],
                     "type": row_a[1],
                     "name": row_a[2],
-                    "is_helth": row_a[3],
+                    "is_health": row_a[3],
                 }
                 ads.append(ad)
 
@@ -247,6 +247,7 @@ returning id;
 
             for sport in place['equipment']:
                 cursor.execute(query_sport, (id, sport['type'], sport['count']))
+        cursor.connection.commit()
         return id
 
     except (Exception, psycopg2.DatabaseError) as error:

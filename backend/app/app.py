@@ -48,9 +48,9 @@ class productData(BaseModel):
     type: int
     name: str
     min_cost: int
-    ishealth: bool
-    isalcohol: bool
-    issmoking: bool
+    is_health: bool
+    is_alcohol: bool
+    is_smoking: bool
 
 
 class equipmentData(BaseModel):
@@ -61,7 +61,7 @@ class equipmentData(BaseModel):
 class adsData(BaseModel):
     type: int
     name: str
-    ishealth: bool
+    is_health: bool
 
 
 class placeData(BaseModel):
@@ -70,14 +70,14 @@ class placeData(BaseModel):
     coord1: float
     coord2: float
     type: int
-    foodtype: int
-    isalcohol: bool
-    ishealth: bool
-    isinsurence: bool
-    isnosmoking: bool
-    issmoke: bool
+    food_type: int
+    is_alcohol: bool
+    is_health: bool
+    is_insurance: bool
+    is_nosmoking: bool
+    is_smoke: bool
     rating: int
-    sporttype: int
+    sport_type: int
     products: list[productData]
     equipment: list[equipmentData]
     ads: list[equipmentData]

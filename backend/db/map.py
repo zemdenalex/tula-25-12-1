@@ -53,9 +53,9 @@ LEFT JOIN sport_type st ON st.id = p.sporttype;
                     "id": row_p[0],
                     "type": row_p[1],
                     "min_cost": row_p[2],
-                    "ishealth": row_p[3],
-                    "isalcohol": row_p[4],
-                    "issmoking": row_p[5],
+                    "is_health": row_p[3],
+                    "is_alcohol": row_p[4],
+                    "is_smoking": row_p[5],
                     "name": row_p[6]
                 }
                 products.append(product)
@@ -72,7 +72,7 @@ LEFT JOIN sport_type st ON st.id = p.sporttype;
                     "id": row_a[0],
                     "type": row_a[1],
                     "name": row_a[2],
-                    "ishelth": row_a[3],
+                    "is_helth": row_a[3],
                 }
                 ads.append(ad)
 
@@ -88,9 +88,9 @@ LEFT JOIN sport_type st ON st.id = p.sporttype;
             for row_r in rows_review:
                 review = {
                     "id": row_r[0],
-                    "iduser": row_r[1],
+                    "id_user": row_r[1],
                     "user_name": row_r[2],
-                    "idplace": row_r[3],
+                    "id_place": row_r[3],
                     "text": row_r[4],
                 }
                 reviews.append(review)
@@ -111,9 +111,9 @@ LEFT JOIN sport_type st ON st.id = p.sporttype;
                 sports.append(sport)
 
             place = {"id": row[0], "name": row[1], "coord1": row[2], "coord2": row[3],
-                     "type": row[4], "foodtype": row[5], "isalcohol": row[6],
-                     "ishealth": row[7], "isinsurence": row[8], "isnosmoking": row[9],
-                     "issmoke": row[10], "rating": row[11], "sporttype": row[12], "info": row[13], "products": products,
+                     "type": row[4], "food_type": row[5], "is_alcohol": row[6],
+                     "is_health": row[7], "is_insurance": row[8], "is_nosmoking": row[9],
+                     "is_smoke": row[10], "rating": row[11], "sport_type": row[12], "info": row[13], "products": products,
                      "ads": ads,
                      "reviews": reviews, "equipment": sports}
             places.append(place)
@@ -218,9 +218,9 @@ VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
 returning id; 
         """)
         cursor.execute(query, (place['name'], place['info'], place['coord1'], place['coord2'],
-                               place['type'], place['foodtype'],
-                               place['isalcohol'], place['ishealth'], place['isinsurence'],
-                               place["isnosmoking"], place["issmoke"], place["rating"], place["sporttype"]))
+                               place['type'], place['food_type'],
+                               place['is_alcohol'], place['is_health'], place['is_insurance'],
+                               place["is_nosmoking"], place["is_smoke"], place["rating"], place["sport_type"]))
 
         row = cursor.fetchone()
         id = row[0]
@@ -232,13 +232,13 @@ returning id;
 
         for product in place['products']:
             cursor.execute(query_product,
-                           (product['type'], product['min_cost'], product['ishealth'], product['isalcohol'],
-                            product['issmoking'], product['name'], id))
+                           (product['type'], product['min_cost'], product['is_health'], product['is_alcohol'],
+                            product['is_smoking'], product['name'], id))
         query_ads = sql.SQL("""
                     INSERT INTO reklama (id_place, type, name, ishelth) VALUES (%s, %s, %s, %s);
                     """)
         for ad in place['ads']:
-            cursor.execute(query_ads, (id, ad['type'], ad['name'], ad['ishelth']))
+            cursor.execute(query_ads, (id, ad['type'], ad['name'], ad['is_health']))
 
         query_sport = sql.SQL(
             """ INSERT INTO sport_interfaces_place (id_place, id_interface, count) VALUES (%s, %s, %s)"""

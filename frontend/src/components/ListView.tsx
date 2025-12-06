@@ -1,116 +1,129 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Search, Star, MapPin } from 'lucide-react';
 import { useStore } from '../store';
 import type { Place } from '../types';
 
-function PlaceListItem({ place }: { place: Place }) {
-  const { setSelectedPlace } = useStore();
-  
-  const getTypeTag = () => {
-    if (place.type?.includes('Спорт')) return { text: 'Спортзал', color: 'tag-green' };
-    if (place.type?.includes('Медицин')) return { text: 'Медицина', color: 'tag-blue' };
-    if (place.type?.includes('Магазин')) return { text: 'Магазин', color: 'tag-yellow' };
-    if (place.type?.includes('Питани')) return { text: 'Питание', color: 'tag-yellow' };
-    return { text: place.type || 'Место', color: 'tag-blue' };
+function PlaceCard({ place, onClick }: { place: Place; onClick: () => void }) {
+  const getEmoji = () => {
+    const placeType = place.type?.toLowerCase() || '';
+    if (placeType.includes('медицин') || placeType.includes('аптек')) return '🏥';
+    if (placeType.includes('спорт') || placeType.includes('фитнес')) return '🏋️';
+    if (placeType.includes('магазин') || placeType.includes('торгов')) return '🛒';
+    if (placeType.includes('еда') || placeType.includes('кафе')) return '🍽️';
+    if (placeType.includes('транспорт')) return '🚌';
+    if (placeType.includes('промышлен')) return '🏭';
+    if (place.is_health) return '💚';
+    return '📍';
   };
-  
-  const tag = getTypeTag();
-  const reviewCount = place.reviews?.length || 0;
-  const rating = place.rating ? (place.rating / 20).toFixed(1) : null;
+
+  // User rating (1-5 stars)
+  const userRating = place.review_rank || 0;
+  const healthScore = place.rating || 0;
 
   return (
-    <div 
-      className="card p-4 cursor-pointer hover:shadow-md transition-shadow"
-      onClick={() => setSelectedPlace(place)}
+    <button
+      onClick={onClick}
+      className="w-full card p-4 text-left hover:shadow-md transition-shadow"
     >
       <div className="flex gap-4">
-        <div className="w-24 h-24 bg-gray-100 rounded-xl flex items-center justify-center flex-shrink-0">
-          <span className="text-3xl">
-            {place.type?.includes('Спорт') ? '🏋️' : 
-             place.type?.includes('Медицин') ? '🏥' :
-             place.type?.includes('Магазин') ? '🛒' :
-             place.type?.includes('Питани') ? '🍽️' : '📍'}
-          </span>
+        <div className="w-14 h-14 bg-gray-100 rounded-xl flex items-center justify-center text-2xl flex-shrink-0">
+          {getEmoji()}
         </div>
-        
         <div className="flex-1 min-w-0">
-          <span className={`tag ${tag.color} mb-2`}>{tag.text}</span>
-          
-          <h3 className="font-semibold text-gray-900 truncate">
-            {place.name || 'Без названия'}
-          </h3>
-          
-          <p className="text-sm text-gray-500 truncate mt-1">
-            {place.info || 'Нет описания'}
-          </p>
-          
-          <div className="flex items-center gap-2 mt-2">
-            {rating && (
-              <div className="flex items-center gap-1">
-                <Star size={14} className="text-yellow-400 fill-yellow-400" />
-                <span className="text-sm font-medium">{rating}</span>
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex-1 min-w-0">
+              <h3 className="font-medium text-gray-900 truncate">
+                {place.name || 'Без названия'}
+              </h3>
+              <p className="text-sm text-gray-500 truncate">
+                {place.type || 'Тип не указан'}
+              </p>
+            </div>
+            {healthScore > 0 && (
+              <div className={`tag text-xs ${healthScore >= 70 ? 'tag-green' : healthScore >= 40 ? 'tag-yellow' : 'tag-red'}`}>
+                {healthScore}%
               </div>
             )}
-            {reviewCount > 0 && (
-              <span className="text-sm text-gray-500">
-                ({reviewCount} {reviewCount === 1 ? 'отзыв' : 'отзывов'})
+          </div>
+          
+          <div className="flex items-center gap-3 mt-2">
+            {userRating > 0 && (
+              <div className="flex items-center gap-1">
+                <Star size={14} className="text-yellow-400 fill-yellow-400" />
+                <span className="text-sm text-gray-600">{userRating.toFixed(1)}</span>
+              </div>
+            )}
+            {place.reviews?.length > 0 && (
+              <span className="text-sm text-gray-400">
+                {place.reviews.length} отзыв{place.reviews.length > 1 ? (place.reviews.length < 5 ? 'а' : 'ов') : ''}
               </span>
+            )}
+            {place.distance_to_center && (
+              <div className="flex items-center gap-1 text-sm text-gray-400">
+                <MapPin size={12} />
+                {place.distance_to_center.toFixed(1)} км
+              </div>
             )}
           </div>
         </div>
       </div>
-    </div>
+    </button>
   );
 }
 
 export default function ListView() {
-  const { places, isLoading, setFilterModalOpen } = useStore();
+  const { places, setSelectedPlace } = useStore();
   const [searchQuery, setSearchQuery] = useState('');
-  
-  const filteredPlaces = places.filter(place => 
-    place.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    place.info?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    place.type?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+
+  const filteredPlaces = useMemo(() => {
+    if (!searchQuery.trim()) return places;
+    
+    const query = searchQuery.toLowerCase();
+    return places.filter(place => 
+      place.name?.toLowerCase().includes(query) ||
+      place.type?.toLowerCase().includes(query) ||
+      place.info?.toLowerCase().includes(query)
+    );
+  }, [places, searchQuery]);
 
   return (
     <div className="h-full flex flex-col bg-gray-50">
+      {/* Search */}
       <div className="p-4 bg-white border-b border-gray-200">
-        <div className="flex gap-2">
-          <button
-            onClick={() => setFilterModalOpen(true)}
-            className="p-3 bg-gray-100 rounded-xl text-gray-600 hover:bg-gray-200 transition-colors"
-          >
-            <span className="text-lg">⚙️</span>
-          </button>
-          
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-            <input
-              type="text"
-              placeholder="Поиск..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="input-field pl-10"
-            />
-          </div>
+        <div className="relative">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Поиск по названию или типу..."
+            className="input-field pl-12"
+          />
         </div>
       </div>
-      
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin" />
-          </div>
-        ) : filteredPlaces.length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-gray-500">Ничего не найдено</p>
-          </div>
-        ) : (
-          filteredPlaces.map((place) => (
-            <PlaceListItem key={place.id} place={place} />
-          ))
-        )}
+
+      {/* Results count */}
+      <div className="px-4 py-2 text-sm text-gray-500">
+        Найдено: {filteredPlaces.length} объектов
+      </div>
+
+      {/* Places list */}
+      <div className="flex-1 overflow-y-auto px-4 pb-4">
+        <div className="space-y-3">
+          {filteredPlaces.length === 0 ? (
+            <div className="text-center py-12 text-gray-500">
+              {searchQuery ? 'Ничего не найдено' : 'Нет объектов для отображения'}
+            </div>
+          ) : (
+            filteredPlaces.map((place) => (
+              <PlaceCard
+                key={place.id}
+                place={place}
+                onClick={() => setSelectedPlace(place)}
+              />
+            ))
+          )}
+        </div>
       </div>
     </div>
   );

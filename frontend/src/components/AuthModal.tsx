@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Mail, Lock, User } from 'lucide-react';
+import { X, Mail, Lock, User, Loader2 } from 'lucide-react';
 import { useStore } from '../store';
 import { usersApi } from '../api';
 
@@ -25,16 +25,26 @@ export default function AuthModal() {
     setError('');
   };
 
+  const switchMode = (newMode: AuthMode) => {
+    setMode(newMode);
+    setError('');
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!email.trim() || !password.trim()) {
-      setError('Заполните все поля');
+      setError('Заполните все обязательные поля');
       return;
     }
 
     if (mode === 'register' && !name.trim()) {
       setError('Введите имя');
+      return;
+    }
+
+    if (password.length < 4) {
+      setError('Пароль должен быть не менее 4 символов');
       return;
     }
 
@@ -62,6 +72,8 @@ export default function AuthModal() {
           ? 'Неверный email или пароль' 
           : 'Пользователь с таким email уже существует'
         );
+      } else if (err.code === 'ERR_NETWORK') {
+        setError('Ошибка сети. Проверьте подключение к интернету.');
       } else {
         setError('Произошла ошибка. Попробуйте позже.');
       }
@@ -82,6 +94,7 @@ export default function AuthModal() {
           className="bg-white rounded-3xl w-full max-w-md"
           onClick={(e) => e.stopPropagation()}
         >
+          {/* Header */}
           <div className="p-4 border-b border-gray-100 flex items-center justify-between">
             <div className="w-8" />
             <h2 className="font-semibold text-lg">
@@ -96,94 +109,102 @@ export default function AuthModal() {
           </div>
 
           <form onSubmit={handleSubmit} className="p-6">
+            {/* Mode toggle */}
             <div className="flex bg-gray-100 rounded-xl p-1 mb-6">
               <button
                 type="button"
-                onClick={() => setMode('login')}
-                className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+                onClick={() => switchMode('login')}
+                className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                   mode === 'login' 
                     ? 'bg-white text-gray-900 shadow-sm' 
-                    : 'text-gray-600'
+                    : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
                 Вход
               </button>
               <button
                 type="button"
-                onClick={() => setMode('register')}
-                className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+                onClick={() => switchMode('register')}
+                className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                   mode === 'register' 
                     ? 'bg-white text-gray-900 shadow-sm' 
-                    : 'text-gray-600'
+                    : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
                 Регистрация
               </button>
             </div>
 
+            {/* Form fields */}
             <div className="space-y-4">
               {mode === 'register' && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
                     Имя
                   </label>
                   <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                    <User className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
                     <input
                       type="text"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       placeholder="Ваше имя"
-                      className="input-field pl-10"
+                      className="input-field pl-12"
+                      autoComplete="name"
                     />
                   </div>
                 </div>
               )}
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
                   Email
                 </label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
                   <input
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="example@mail.ru"
-                    className="input-field pl-10"
+                    className="input-field pl-12"
+                    autoComplete="email"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
                   Пароль
                 </label>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
                   <input
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="input-field pl-10"
+                    className="input-field pl-12"
+                    autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
                   />
                 </div>
               </div>
             </div>
 
+            {/* Error */}
             {error && (
               <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm">
                 {error}
               </div>
             )}
 
+            {/* Submit */}
             <button
               type="submit"
               disabled={isSubmitting}
-              className="btn-primary w-full mt-6"
+              className="btn-primary w-full mt-6 flex items-center justify-center gap-2"
             >
+              {isSubmitting && <Loader2 size={20} className="animate-spin" />}
               {isSubmitting 
                 ? 'Загрузка...' 
                 : mode === 'login' ? 'Войти' : 'Зарегистрироваться'

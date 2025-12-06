@@ -2,78 +2,88 @@ import { useEffect, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet.markercluster';
+import { Plus } from 'lucide-react';
 import { useStore } from '../store';
 import type { Place } from '../types';
 
+// Tula center coordinates
 const TULA_CENTER: [number, number] = [54.193122, 37.617348];
-const DEFAULT_ZOOM = 13;
 
-function getMarkerIcon(place: Place) {
-  const isHealthy = place.is_health || place.type === 'Спортивные объекты';
-  const isHarmful = place.is_alcohol || place.is_smoke;
-  
+function getMarkerIcon(place: Place): L.DivIcon {
   let emoji = '📍';
-  let borderColor = '#3b82f6';
+  let colorClass = 'neutral';
   
-  if (place.type?.includes('Медицин')) {
+  const placeType = place.type?.toLowerCase() || '';
+  
+  if (placeType.includes('медицин') || placeType.includes('аптек')) {
     emoji = '🏥';
-    borderColor = '#22c55e';
-  } else if (place.type?.includes('Спорт')) {
+    colorClass = 'positive';
+  } else if (placeType.includes('спорт') || placeType.includes('фитнес')) {
     emoji = '🏋️';
-    borderColor = '#22c55e';
-  } else if (place.type?.includes('Магазин')) {
+    colorClass = 'positive';
+  } else if (placeType.includes('магазин') || placeType.includes('торгов')) {
     emoji = '🛒';
-    borderColor = place.is_health ? '#22c55e' : (place.is_alcohol ? '#ef4444' : '#f59e0b');
-  } else if (place.type?.includes('Питани')) {
+    colorClass = place.is_health ? 'positive' : place.is_alcohol ? 'negative' : 'neutral';
+  } else if (placeType.includes('еда') || placeType.includes('кафе') || placeType.includes('ресторан')) {
     emoji = '🍽️';
-    borderColor = place.is_alcohol ? '#ef4444' : '#f59e0b';
-  } else if (place.type?.includes('Остановк')) {
+    colorClass = place.is_health ? 'positive' : 'neutral';
+  } else if (placeType.includes('транспорт') || placeType.includes('остановк')) {
     emoji = '🚌';
-  } else if (place.type?.includes('Промышлен')) {
+    colorClass = 'neutral';
+  } else if (placeType.includes('промышлен') || placeType.includes('завод')) {
     emoji = '🏭';
-    borderColor = '#ef4444';
-  } else if (place.type?.includes('мусор')) {
+    colorClass = 'negative';
+  } else if (placeType.includes('отход') || placeType.includes('мусор')) {
     emoji = '🗑️';
+    colorClass = 'negative';
+  } else if (place.is_health) {
+    emoji = '💚';
+    colorClass = 'positive';
+  } else if (place.is_smoke || place.is_alcohol) {
+    colorClass = 'negative';
   }
-  
+
   return L.divIcon({
-    html: `<div class="custom-marker" style="border-color: ${borderColor}">${emoji}</div>`,
-    className: 'custom-div-icon',
-    iconSize: [32, 32],
-    iconAnchor: [16, 16],
+    className: '',
+    html: `<div class="custom-marker ${colorClass}">${emoji}</div>`,
+    iconSize: [36, 36],
+    iconAnchor: [18, 18],
   });
 }
 
-function MarkerClusterGroup() {
+function MarkerClusterLayer({ places }: { places: Place[] }) {
   const map = useMap();
-  const { places, setSelectedPlace } = useStore();
   const clusterRef = useRef<L.MarkerClusterGroup | null>(null);
+  const { setSelectedPlace } = useStore();
 
   useEffect(() => {
     if (!map) return;
 
+    // Remove existing cluster
     if (clusterRef.current) {
       map.removeLayer(clusterRef.current);
     }
 
+    // Create new cluster group
     const cluster = L.markerClusterGroup({
-      chunkedLoading: true,
       maxClusterRadius: 50,
       spiderfyOnMaxZoom: true,
       showCoverageOnHover: false,
-      zoomToBoundsOnClick: true,
+      chunkedLoading: true,
+      animate: true,
     });
 
+    // Add markers to cluster
     places.forEach((place) => {
       if (place.coord1 && place.coord2) {
         const marker = L.marker([place.coord1, place.coord2], {
           icon: getMarkerIcon(place),
         });
-        
+
         marker.on('click', () => {
           setSelectedPlace(place);
         });
-        
+
         cluster.addLayer(marker);
       }
     });
@@ -92,52 +102,39 @@ function MarkerClusterGroup() {
 }
 
 export default function MapView() {
-  const { isLoading } = useStore();
+  const { places, user, setAuthModalOpen } = useStore();
 
-  return (
-    <div className="h-full w-full relative">
-      {isLoading && (
-        <div className="absolute inset-0 bg-white/50 z-[1000] flex items-center justify-center">
-          <div className="w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin" />
-        </div>
-      )}
-      
-      <MapContainer
-        center={TULA_CENTER}
-        zoom={DEFAULT_ZOOM}
-        className="h-full w-full"
-        zoomControl={false}
-      >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
-        <MarkerClusterGroup />
-      </MapContainer>
-      
-      <AddButton />
-    </div>
-  );
-}
-
-function AddButton() {
-  const { user, setAuthModalOpen } = useStore();
-  
-  const handleAdd = () => {
+  const handleAddPlace = () => {
     if (!user) {
       setAuthModalOpen(true);
       return;
     }
-    alert('Добавление объекта — в разработке');
+    // TODO: Implement add place modal
+    alert('Добавление объекта будет доступно в следующей версии');
   };
 
   return (
-    <button
-      onClick={handleAdd}
-      className="absolute bottom-24 right-4 z-[1000] w-14 h-14 bg-primary-500 text-white rounded-full shadow-lg flex items-center justify-center hover:bg-primary-600 transition-colors"
-      aria-label="Добавить объект"
-    >
-      <span className="text-2xl">+</span>
-    </button>
+    <div className="relative w-full h-full">
+      <MapContainer
+        center={TULA_CENTER}
+        zoom={13}
+        className="w-full h-full"
+        zoomControl={false}
+      >
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+        <MarkerClusterLayer places={places} />
+      </MapContainer>
+
+      {/* FAB for adding places */}
+      <button
+        onClick={handleAddPlace}
+        className="absolute bottom-6 right-6 w-14 h-14 bg-primary-500 text-white rounded-full shadow-lg flex items-center justify-center hover:bg-primary-600 transition-colors z-[1000]"
+      >
+        <Plus size={24} />
+      </button>
+    </div>
   );
 }

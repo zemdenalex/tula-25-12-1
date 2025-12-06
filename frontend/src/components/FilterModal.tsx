@@ -1,7 +1,36 @@
 import { useState, useEffect } from 'react';
-import { X, Check } from 'lucide-react';
+import { X, Check, RotateCcw } from 'lucide-react';
 import { useStore } from '../store';
 import type { SearchFilters } from '../types';
+
+function FilterCheckbox({ 
+  checked, 
+  onChange, 
+  label, 
+  icon 
+}: { 
+  checked: boolean; 
+  onChange: () => void; 
+  label: string; 
+  icon: string;
+}) {
+  return (
+    <button
+      onClick={onChange}
+      className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors"
+    >
+      <span className="text-xl">{icon}</span>
+      <span className="flex-1 text-left text-gray-700">{label}</span>
+      <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-colors ${
+        checked 
+          ? 'bg-primary-500 border-primary-500' 
+          : 'border-gray-300'
+      }`}>
+        {checked && <Check size={16} className="text-white" />}
+      </div>
+    </button>
+  );
+}
 
 export default function FilterModal() {
   const { 
@@ -17,7 +46,7 @@ export default function FilterModal() {
 
   useEffect(() => {
     setLocalFilters(filters);
-  }, [filters]);
+  }, [filters, isFilterModalOpen]);
 
   if (!isFilterModalOpen) return null;
 
@@ -26,9 +55,15 @@ export default function FilterModal() {
   };
 
   const handleApply = async () => {
-    const hasFilters = Object.values(localFilters).some(v => v !== undefined && v !== null);
+    const hasActiveFilters = 
+      localFilters.place_type !== undefined ||
+      localFilters.is_alcohol !== undefined ||
+      localFilters.is_health !== undefined ||
+      localFilters.is_nosmoking !== undefined ||
+      localFilters.is_smoke !== undefined ||
+      localFilters.is_moderated !== undefined;
     
-    if (hasFilters) {
+    if (hasActiveFilters) {
       await searchPlaces(localFilters);
     } else {
       await fetchPlaces();
@@ -38,7 +73,7 @@ export default function FilterModal() {
   };
 
   const handleReset = () => {
-    setLocalFilters({ is_moderated: true, max_distance: 50 });
+    setLocalFilters({ max_distance: 100 });
   };
 
   const togglePlaceType = (typeId: number) => {
@@ -79,9 +114,10 @@ export default function FilterModal() {
             <h2 className="font-semibold text-lg">Фильтры</h2>
             <button
               onClick={handleReset}
-              className="text-primary-600 text-sm font-medium"
+              className="p-2 -mr-2 text-primary-600 hover:text-primary-700"
+              title="Сбросить"
             >
-              Сбросить
+              <RotateCcw size={20} />
             </button>
           </div>
 
@@ -102,12 +138,15 @@ export default function FilterModal() {
                     {type.type}
                   </button>
                 ))}
+                {placeTypesList.length === 0 && (
+                  <p className="text-gray-400 text-sm">Загрузка типов...</p>
+                )}
               </div>
             </div>
 
             <div className="mb-6">
               <h3 className="font-medium text-gray-900 mb-3">Характеристики</h3>
-              <div className="space-y-2">
+              <div className="space-y-1">
                 <FilterCheckbox
                   checked={localFilters.is_health === true}
                   onChange={() => toggleBoolFilter('is_health')}
@@ -132,18 +171,24 @@ export default function FilterModal() {
                   label="Разрешено курение"
                   icon="🚬"
                 />
+                <FilterCheckbox
+                  checked={localFilters.is_moderated === true}
+                  onChange={() => toggleBoolFilter('is_moderated')}
+                  label="Только проверенные"
+                  icon="✓"
+                />
               </div>
             </div>
 
             <div className="mb-6">
               <h3 className="font-medium text-gray-900 mb-3">
-                Расстояние от центра: {localFilters.max_distance || 50} км
+                Расстояние от центра: {localFilters.max_distance || 100} км
               </h3>
               <input
                 type="range"
                 min="1"
                 max="100"
-                value={localFilters.max_distance || 50}
+                value={localFilters.max_distance || 100}
                 onChange={(e) => setLocalFilters(prev => ({
                   ...prev,
                   max_distance: parseInt(e.target.value)
@@ -162,40 +207,11 @@ export default function FilterModal() {
               onClick={handleApply}
               className="btn-primary w-full"
             >
-              Применить
+              Применить фильтры
             </button>
           </div>
         </div>
       </div>
     </>
-  );
-}
-
-function FilterCheckbox({ 
-  checked, 
-  onChange, 
-  label, 
-  icon 
-}: { 
-  checked: boolean; 
-  onChange: () => void; 
-  label: string; 
-  icon: string;
-}) {
-  return (
-    <button
-      onClick={onChange}
-      className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors"
-    >
-      <span className="text-xl">{icon}</span>
-      <span className="flex-1 text-left text-gray-700">{label}</span>
-      <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-colors ${
-        checked 
-          ? 'bg-primary-500 border-primary-500' 
-          : 'border-gray-300'
-      }`}>
-        {checked && <Check size={16} className="text-white" />}
-      </div>
-    </button>
   );
 }

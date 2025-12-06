@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { X, Star, Camera } from 'lucide-react';
+import { X, Star, Camera, Loader2 } from 'lucide-react';
 import { useStore } from '../store';
-import { reviewsApi, placesApi } from '../api';
+import { reviewsApi, photoApi } from '../api';
 
 export default function ReviewForm() {
   const { 
@@ -9,13 +9,15 @@ export default function ReviewForm() {
     setReviewFormOpen, 
     selectedPlace, 
     user,
-    fetchPlaces
+    refreshSelectedPlace
   } = useStore();
   
   const [rating, setRating] = useState(0);
   const [hoverRating, setHoverRating] = useState(0);
   const [text, setText] = useState('');
+  const [photos, setPhotos] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState('');
 
   if (!isReviewFormOpen || !selectedPlace || !user) return null;
@@ -24,7 +26,31 @@ export default function ReviewForm() {
     setReviewFormOpen(false);
     setRating(0);
     setText('');
+    setPhotos([]);
     setError('');
+  };
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsUploading(true);
+    setError('');
+
+    try {
+      const uploadPromises = Array.from(files).map(file => photoApi.upload(file));
+      const urls = await Promise.all(uploadPromises);
+      setPhotos(prev => [...prev, ...urls]);
+    } catch (err) {
+      console.error('Failed to upload photos:', err);
+      setError('Не удалось загрузить фото');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const removePhoto = (index: number) => {
+    setPhotos(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleSubmit = async () => {
@@ -46,9 +72,11 @@ export default function ReviewForm() {
         message: text.trim(),
         user_id: user.user_id,
         place_id: selectedPlace.id!,
+        rating: rating,
+        photos: photos.length > 0 ? photos : undefined,
       });
       
-      await fetchPlaces();
+      await refreshSelectedPlace();
       handleClose();
     } catch (err: any) {
       console.error('Failed to submit review:', err);
@@ -74,6 +102,7 @@ export default function ReviewForm() {
           className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-md max-h-[90vh] flex flex-col"
           onClick={(e) => e.stopPropagation()}
         >
+          {/* Header */}
           <div className="p-4 border-b border-gray-100 flex items-center justify-between">
             <button
               onClick={handleClose}
@@ -81,14 +110,22 @@ export default function ReviewForm() {
             >
               <X size={24} />
             </button>
-            <h2 className="font-semibold text-lg">Отзыв</h2>
+            <h2 className="font-semibold text-lg">Написать отзыв</h2>
             <div className="w-8" />
           </div>
 
+          {/* Content */}
           <div className="flex-1 overflow-y-auto p-4">
+            {/* Place name */}
+            <div className="mb-6 p-3 bg-gray-50 rounded-xl">
+              <p className="text-sm text-gray-500">Отзыв на</p>
+              <p className="font-medium text-gray-900">{selectedPlace.name}</p>
+            </div>
+
+            {/* Rating */}
             <div className="mb-6">
-              <h3 className="font-medium text-gray-900 mb-3">Оцените объект</h3>
-              <div className="flex gap-2">
+              <h3 className="font-medium text-gray-900 mb-3">Ваша оценка</h3>
+              <div className="flex gap-2 justify-center">
                 {[1, 2, 3, 4, 5].map((star) => (
                   <button
                     key={star}
@@ -99,7 +136,7 @@ export default function ReviewForm() {
                     className="p-1 transition-transform hover:scale-110"
                   >
                     <Star
-                      size={32}
+                      size={40}
                       className={
                         star <= (hoverRating || rating)
                           ? 'text-yellow-400 fill-yellow-400'
@@ -111,6 +148,7 @@ export default function ReviewForm() {
               </div>
             </div>
 
+            {/* Comment */}
             <div className="mb-6">
               <h3 className="font-medium text-gray-900 mb-3">Комментарий</h3>
               <textarea
@@ -125,19 +163,55 @@ export default function ReviewForm() {
               </div>
             </div>
 
+            {/* Photos */}
             <div className="mb-6">
               <h3 className="font-medium text-gray-900 mb-3">Фотографии</h3>
-              <button
-                type="button"
-                className="w-full border-2 border-dashed border-gray-200 rounded-xl p-8 text-center hover:border-gray-300 transition-colors"
-              >
-                <Camera className="mx-auto text-gray-400 mb-2" size={32} />
-                <p className="text-gray-500 text-sm">
-                  Нажмите, чтобы загрузить фото
-                </p>
-              </button>
+              
+              {/* Uploaded photos */}
+              {photos.length > 0 && (
+                <div className="flex gap-2 mb-3 overflow-x-auto pb-2">
+                  {photos.map((url, idx) => (
+                    <div key={idx} className="relative flex-shrink-0">
+                      <img 
+                        src={url} 
+                        alt={`Фото ${idx + 1}`}
+                        className="w-20 h-20 object-cover rounded-lg"
+                      />
+                      <button
+                        onClick={() => removePhoto(idx)}
+                        className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center text-sm"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Upload button */}
+              <label className="block">
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handlePhotoUpload}
+                  className="hidden"
+                  disabled={isUploading}
+                />
+                <div className="w-full border-2 border-dashed border-gray-200 rounded-xl p-6 text-center hover:border-gray-300 transition-colors cursor-pointer">
+                  {isUploading ? (
+                    <Loader2 className="mx-auto text-gray-400 animate-spin" size={32} />
+                  ) : (
+                    <Camera className="mx-auto text-gray-400" size={32} />
+                  )}
+                  <p className="text-gray-500 text-sm mt-2">
+                    {isUploading ? 'Загрузка...' : 'Нажмите для загрузки фото'}
+                  </p>
+                </div>
+              </label>
             </div>
 
+            {/* Error */}
             {error && (
               <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm">
                 {error}
@@ -145,13 +219,15 @@ export default function ReviewForm() {
             )}
           </div>
 
+          {/* Footer */}
           <div className="p-4 border-t border-gray-100 safe-area-bottom">
             <button
               onClick={handleSubmit}
-              disabled={isSubmitting}
-              className="btn-primary w-full"
+              disabled={isSubmitting || isUploading}
+              className="btn-primary w-full flex items-center justify-center gap-2"
             >
-              {isSubmitting ? 'Отправка...' : 'Отправить'}
+              {isSubmitting && <Loader2 size={20} className="animate-spin" />}
+              {isSubmitting ? 'Отправка...' : 'Отправить отзыв'}
             </button>
           </div>
         </div>

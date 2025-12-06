@@ -1,86 +1,141 @@
-import axios from 'axios';
-import type { Place, PlaceCreateData, PlaceTypes, User, UserCreateData, UserLoginData, UserReviewData, SearchFilters } from '../types';
+import axios, { AxiosError } from 'axios';
+import type { 
+  Place, PlaceCreateData, PlaceTypes, User, UserCreateData, 
+  UserLoginData, UserReviewData, SearchFilters, ReviewRankData,
+  AdminCreateData, AdminLoginData, AdminUpdateUserData,
+  AdminVerifyPlaceData, AdminDeleteReviewData
+} from '../types';
 
-const API_BASE = 'http://85.198.80.80:8000/api';
+// Use proxy in dev, direct URL in production
+const API_BASE = import.meta.env.DEV ? '/api' : 'http://85.198.80.80:8000/api';
 
 const api = axios.create({
   baseURL: API_BASE,
   headers: {
     'Content-Type': 'application/json',
   },
+  timeout: 10000,
 });
 
-export const placesApi = {
-  getAll: async (): Promise<Place[]> => {
-    const { data } = await api.get<Place[]>('/place/');
-    return data;
-  },
-
-  getById: async (id: number): Promise<Place> => {
-    const { data } = await api.get<Place>(`/place/point/${id}`);
-    return data;
-  },
-
-  search: async (filters: SearchFilters): Promise<Place[]> => {
-    const params = new URLSearchParams();
-    if (filters.place_type !== undefined) params.append('place_type', String(filters.place_type));
-    if (filters.is_alcohol !== undefined) params.append('is_alcohol', String(filters.is_alcohol));
-    if (filters.is_health !== undefined) params.append('is_health', String(filters.is_health));
-    if (filters.is_nosmoking !== undefined) params.append('is_nosmoking', String(filters.is_nosmoking));
-    if (filters.is_smoke !== undefined) params.append('is_smoke', String(filters.is_smoke));
-    if (filters.max_distance !== undefined) params.append('max_distance', String(filters.max_distance));
-    if (filters.is_moderated !== undefined) params.append('is_moderated', String(filters.is_moderated));
-    
-    const { data } = await api.get<Place[]>(`/place/search?${params.toString()}`);
-    return data;
-  },
-
-  create: async (place: PlaceCreateData): Promise<number> => {
-    const { data } = await api.post<number>('/place/', place);
-    return data;
-  },
-
-  update: async (id: number, place: PlaceCreateData): Promise<void> => {
-    await api.post(`/place/change/${id}`, place);
-  },
-
-  getTypes: async (): Promise<PlaceTypes> => {
-    const { data } = await api.get<PlaceTypes>('/place/types');
-    return data;
-  },
-};
-
-export const usersApi = {
-  create: async (userData: UserCreateData): Promise<{ user_id: number }> => {
-    const { data } = await api.post<{ user_id: number }>('/user/create', userData);
-    return data;
-  },
-
-  login: async (loginData: UserLoginData): Promise<{ user_id: number }> => {
-    const { data } = await api.post<{ user_id: number }>('/user/login', loginData);
-    return data;
-  },
-
-  getById: async (id: number): Promise<User> => {
-    const { data } = await api.get<User>(`/user/${id}`);
-    return data;
-  },
-
-  getAll: async (): Promise<User[]> => {
-    const { data } = await api.get<User[]>('/user/');
-    return data;
-  },
-};
-
-export const reviewsApi = {
-  add: async (review: UserReviewData): Promise<void> => {
-    await api.post('/user/review', review);
-  },
-
-  delete: async (userId: number, reviewId: number): Promise<void> => {
-    await api.delete('/user/review', {
-      data: { user_id: userId, review_id: reviewId },
+// Handle 418 "I'm a teapot" as empty data (backend returns this when no data)
+const handleResponse = <T>(promise: Promise<{ data: T }>): Promise<T> => {
+  return promise
+    .then(res => res.data)
+    .catch((error: AxiosError) => {
+      if (error.response?.status === 418) {
+        // Backend returns 418 when no data - treat as empty
+        return [] as unknown as T;
+      }
+      throw error;
     });
+};
+
+// Places API
+export const placesApi = {
+  getAll: (): Promise<Place[]> => {
+    return handleResponse(api.get<Place[]>('/place/'));
+  },
+
+  getById: (id: number): Promise<Place> => {
+    return handleResponse(api.get<Place>(`/place/point/${id}`));
+  },
+
+  search: (filters: SearchFilters): Promise<Place[]> => {
+    const params = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        params.append(key, String(value));
+      }
+    });
+    return handleResponse(api.get<Place[]>(`/place/search?${params.toString()}`));
+  },
+
+  create: (place: PlaceCreateData): Promise<number> => {
+    return handleResponse(api.post<number>('/place/', place));
+  },
+
+  update: (id: number, place: PlaceCreateData): Promise<void> => {
+    return handleResponse(api.post(`/place/change/${id}`, place));
+  },
+
+  getTypes: (): Promise<PlaceTypes> => {
+    return handleResponse(api.get<PlaceTypes>('/place/types'));
+  },
+};
+
+// Users API
+export const usersApi = {
+  create: (userData: UserCreateData): Promise<{ user_id: number }> => {
+    return handleResponse(api.post<{ user_id: number }>('/user/create', userData));
+  },
+
+  login: (loginData: UserLoginData): Promise<{ user_id: number }> => {
+    return handleResponse(api.post<{ user_id: number }>('/user/login', loginData));
+  },
+
+  getById: (id: number): Promise<User> => {
+    return handleResponse(api.get<User>(`/user/${id}`));
+  },
+
+  getAll: (): Promise<User[]> => {
+    return handleResponse(api.get<User[]>('/user/'));
+  },
+};
+
+// Reviews API
+export const reviewsApi = {
+  add: (review: UserReviewData): Promise<void> => {
+    return handleResponse(api.post('/user/review', review));
+  },
+
+  delete: (userId: number, reviewId: number): Promise<void> => {
+    return handleResponse(api.delete('/user/review', {
+      data: { user_id: userId, review_id: reviewId },
+    }));
+  },
+
+  setRank: (data: ReviewRankData): Promise<void> => {
+    return handleResponse(api.post('/review/rank', data));
+  },
+};
+
+// Photo API
+export const photoApi = {
+  upload: async (file: File): Promise<string> => {
+    const arrayBuffer = await file.arrayBuffer();
+    const response = await api.post<{ url: string }>('/photo/upload', arrayBuffer, {
+      headers: {
+        'Content-Type': file.type || 'image/jpeg',
+      },
+    });
+    return response.data.url;
+  },
+};
+
+// Admin API
+export const adminApi = {
+  create: (data: AdminCreateData): Promise<{ id: number }> => {
+    return handleResponse(api.post<{ id: number }>('/admin/create', data));
+  },
+
+  login: (data: AdminLoginData): Promise<{ id: number }> => {
+    return handleResponse(api.post<{ id: number }>('/admin/login', data));
+  },
+
+  updateUserRating: (data: AdminUpdateUserData): Promise<void> => {
+    return handleResponse(api.put('/admin/user', data));
+  },
+
+  verifyPlace: (data: AdminVerifyPlaceData): Promise<void> => {
+    return handleResponse(api.put('/admin/place', data));
+  },
+
+  banUser: (userId: number): Promise<void> => {
+    return handleResponse(api.delete(`/admin/user/${userId}`));
+  },
+
+  deleteReview: (data: AdminDeleteReviewData): Promise<void> => {
+    return handleResponse(api.delete('/admin/review', { data }));
   },
 };
 

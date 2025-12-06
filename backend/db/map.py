@@ -87,12 +87,37 @@ LEFT JOIN sport_type st ON st.id = p.sporttype;
             rows_review = cursor.fetchall()
             reviews = []
             for row_r in rows_review:
+                review_id = row_r[0]
+                # Получаем фото для этого отзыва
+                query_photos = sql.SQL("""
+                    SELECT url FROM reviews_photo WHERE review_id = %s
+                """)
+                cursor.execute(query_photos, (review_id,))
+                rows_photos = cursor.fetchall()
+                review_photos = [row_photo[0] for row_photo in rows_photos]
+                
+                # Получаем количество лайков и дизлайков
+                query_ranks = sql.SQL("""
+                    SELECT 
+                        COUNT(*) FILTER (WHERE "like" = true) as like_count,
+                        COUNT(*) FILTER (WHERE dislike = true) as dislike_count
+                    FROM reviews_ranks 
+                    WHERE review_id = %s
+                """)
+                cursor.execute(query_ranks, (review_id,))
+                ranks_row = cursor.fetchone()
+                like_count = ranks_row[0] if ranks_row else 0
+                dislike_count = ranks_row[1] if ranks_row else 0
+                
                 review = {
-                    "id": row_r[0],
+                    "id": review_id,
                     "id_user": row_r[1],
                     "user_name": row_r[2],
                     "id_place": row_r[3],
                     "text": row_r[4],
+                    "review_photos": review_photos,
+                    "like": like_count,
+                    "dislike": dislike_count,
                 }
                 reviews.append(review)
 
@@ -193,12 +218,37 @@ LEFT JOIN sport_type st ON st.id = p.sporttype WHERE p.id = %s;
         rows_review = cursor.fetchall()
         reviews = []
         for row_r in rows_review:
+            review_id = row_r[0]
+            # Получаем фото для этого отзыва
+            query_photos = sql.SQL("""
+                SELECT url FROM reviews_photo WHERE review_id = %s
+            """)
+            cursor.execute(query_photos, (review_id,))
+            rows_photos = cursor.fetchall()
+            review_photos = [row_photo[0] for row_photo in rows_photos]
+            
+            # Получаем количество лайков и дизлайков
+            query_ranks = sql.SQL("""
+                SELECT 
+                    COUNT(*) FILTER (WHERE "like" = true) as like_count,
+                    COUNT(*) FILTER (WHERE dislike = true) as dislike_count
+                FROM reviews_ranks 
+                WHERE review_id = %s
+            """)
+            cursor.execute(query_ranks, (review_id,))
+            ranks_row = cursor.fetchone()
+            like_count = ranks_row[0] if ranks_row else 0
+            dislike_count = ranks_row[1] if ranks_row else 0
+            
             review = {
-                "id": row_r[0],
+                "id": review_id,
                 "id_user": row_r[1],
                 "user_name": row_r[2],
                 "id_place": row_r[3],
                 "text": row_r[4],
+                "review_photos": review_photos,
+                "like": like_count,
+                "dislike": dislike_count,
             }
             reviews.append(review)
 

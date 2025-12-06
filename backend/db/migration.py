@@ -119,7 +119,22 @@ CREATE TABLE IF NOT EXISTS reviews (
     id serial PRIMARY KEY,
     idUser int,
     idPlace int,
-    text varchar
+    text varchar,
+    rating int
+);
+
+CREATE TABLE IF NOT EXISTS reviews_photo (
+    id serial PRIMARY KEY,
+    review_id int,
+    url varchar
+);
+
+CREATE TABLE IF NOT EXISTS reviews_ranks (
+    id serial PRIMARY KEY,
+    review_id int,
+    user_id int,
+    "like" bool default false,
+    dislike bool default false
 );
 
 CREATE TABLE IF NOT EXISTS admins (
@@ -147,6 +162,10 @@ CREATE TABLE IF NOT EXISTS admins (
                                    WHERE table_name='users' AND column_name='photo') THEN
                         ALTER TABLE users ADD COLUMN photo varchar;
                     END IF;
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                                   WHERE table_name='reviews' AND column_name='rating') THEN
+                        ALTER TABLE reviews ADD COLUMN rating int;
+                    END IF;
                 END $$;
             """)
         except Exception as e:
@@ -162,22 +181,22 @@ CREATE TABLE IF NOT EXISTS admins (
             conn.close()
 
 
-# def migration_down():
-#     conn = db_connection()
-#     cur = conn.cursor()
-#     try:
-#         drop = sql.SQL("""DROP TABLE IF EXISTS admins, places, places_type, product,
-#                             product_type, reklama, reklama_type, reviews, sport_type, sport_interfaces,
-#                             sport_interfaces_place, food_type;""")
-#
-#         cur.execute(drop)
-#         conn.commit()
-#     except (Exception, psycopg2.DatabaseError) as error:
-#         return error
-#     finally:
-#         if conn:
-#             cur.close()
-#             conn.close()
+def migration_down():
+    conn = db_connection()
+    cur = conn.cursor()
+    try:
+        drop = sql.SQL("""DROP TABLE IF EXISTS admins, places, places_type, product,
+                            product_type, reklama, reklama_type, reviews, reviews_photo, reviews_ranks, sport_type, sport_interfaces,
+                            sport_interfaces_place, food_type, users;""")
+
+        cur.execute(drop)
+        conn.commit()
+    except (Exception, psycopg2.DatabaseError) as error:
+        return error
+    finally:
+        if conn:
+            cur.close()
+            conn.close()
 
 
 

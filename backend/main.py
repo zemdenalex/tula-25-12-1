@@ -4,6 +4,7 @@ import uvicorn
 
 import db.migration
 from app.app import app
+from s3_client import ensure_bucket_exists
 
 
 async def start_api():
@@ -20,4 +21,9 @@ async def main():
 
 if __name__ == '__main__':
     db.migration.migration_up()
+    # Инициализируем MinIO bucket при старте
+    try:
+        ensure_bucket_exists()
+    except Exception as e:
+        print(f"Warning: Could not initialize MinIO bucket: {e}")
     asyncio.run(main())

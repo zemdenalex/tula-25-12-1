@@ -111,10 +111,11 @@ async def update_user_rating(user_id: int, rating: int) -> bool:
         # Проверяем, существует ли пользователь
         check_query = sql.SQL("SELECT id, rating FROM users WHERE id = %s")
         cursor.execute(check_query, (user_id,))
-        if not cursor.fetchone():
+        row = cursor.fetchone()
+        if not row:
             return False
 
-        current_rating = cursor.fetchone()[1] + rating
+        current_rating = row[1] + rating
 
         # Обновляем рейтинг
         query = sql.SQL("""

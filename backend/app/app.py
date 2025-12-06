@@ -2,11 +2,11 @@ import json
 import time
 from datetime import datetime, timedelta
 
-from fastapi import FastAPI, HTTPException, APIRouter, Request, Response
+from fastapi import FastAPI, HTTPException, APIRouter, Request, Response, Query
 from starlette.middleware.cors import CORSMiddleware as cors
 
 import os
-from db.map import get_all_places, add_place, get_all_types
+from db.map import get_all_places, add_place, get_all_types, get_place
 
 from typing import Dict, Any, Optional, List
 from typing import Dict, Any, Optional, List
@@ -123,7 +123,15 @@ async def get_all_points_h():
     return all_points
 
 
-@place_router.get("/types")
+
+@place_router.get("/{id}")
+async def get_point_h(id: int):
+    point = await get_place(id)
+    if not point:
+        raise HTTPException(status_code=418, detail="i am a teapot ;)")
+    return point
+
+@place_router.get("/forcreate/types")
 async def get_all_types_h():
     all_types = await get_all_types()
     if not all_types:

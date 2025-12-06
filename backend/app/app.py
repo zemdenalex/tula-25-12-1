@@ -8,7 +8,7 @@ from starlette.middleware.cors import CORSMiddleware as cors
 import os
 from db.map import get_all_places, add_place, get_all_types
 
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from pydantic import BaseModel
 
 app = FastAPI(root_path="/api")
@@ -46,7 +46,7 @@ place_router = APIRouter()
 
 class productData(BaseModel):
     type: int
-    name: str
+    name: Optional[str] = None
     min_cost: int
     is_health: bool
     is_alcohol: bool
@@ -65,26 +65,26 @@ class adsData(BaseModel):
 
 
 class placeData(BaseModel):
-    name: str
-    info: str
+    name: Optional[str] = None
+    info: Optional[str] = None
     coord1: float
     coord2: float
-    type: int
-    food_type: int
-    is_alcohol: bool
-    is_health: bool
-    is_insurance: bool
-    is_nosmoking: bool
-    is_smoke: bool
-    rating: int
-    sport_type: int
-    products: list[productData]
-    equipment: list[equipmentData]
-    ads: list[equipmentData]
+    type: Optional[int] = None
+    food_type: Optional[int] = None
+    is_alcohol: Optional[bool] = False
+    is_health: Optional[bool] = False
+    is_insurance: Optional[bool] = False
+    is_nosmoking: Optional[bool] = False
+    is_smoke: Optional[bool] = False
+    rating: Optional[int] = None
+    sport_type: Optional[int] = None
+    products: Optional[list[productData]] = None
+    equipment: Optional[list[equipmentData]] = None
+    ads: Optional[list[equipmentData]] = None
 
 
 @place_router.get("/")
-async def get_all_points_h()-> Dict[str, Any]:
+async def get_all_points_h():
     all_points = await get_all_places()
     if not all_points:
         raise HTTPException(status_code=418, detail="i am a teapot ;)")
@@ -92,11 +92,12 @@ async def get_all_points_h()-> Dict[str, Any]:
 
 
 @place_router.get("/types")
-async def get_all_types_h()-> Dict[str, Any]:
+async def get_all_types_h():
     all_types = await get_all_types()
     if not all_types:
         raise HTTPException(status_code=418, detail="i am a teapot ;)")
     return all_types
+
 
 @place_router.post("/")
 async def add_point_h(data: placeData) -> int:

@@ -224,28 +224,29 @@ returning id;
 
         row = cursor.fetchone()
         id = row[0]
+        if place['products']:
+            query_product = sql.SQL("""
+            INSERT INTO product (type, min_cost, ishealth, isalcohol, issmoking, name, id_place) 
+            VALUES (%s, %s, %s, %s, %s, %s, %s);
+            """)
 
-        query_product = sql.SQL("""
-        INSERT INTO product (type, min_cost, ishealth, isalcohol, issmoking, name, id_place) 
-        VALUES (%s, %s, %s, %s, %s, %s, %s);
-        """)
+            for product in place['products']:
+                cursor.execute(query_product,
+                               (product['type'], product['min_cost'], product['is_health'], product['is_alcohol'],
+                                product['is_smoking'], product['name'], id))
+        if place['ads']:
+            query_ads = sql.SQL("""
+                        INSERT INTO reklama (id_place, type, name, ishelth) VALUES (%s, %s, %s, %s);
+                        """)
+            for ad in place['ads']:
+                cursor.execute(query_ads, (id, ad['type'], ad['name'], ad['is_health']))
+        if place['equipment']:
+            query_sport = sql.SQL(
+                """ INSERT INTO sport_interfaces_place (id_place, id_interface, count) VALUES (%s, %s, %s)"""
+            )
 
-        for product in place['products']:
-            cursor.execute(query_product,
-                           (product['type'], product['min_cost'], product['is_health'], product['is_alcohol'],
-                            product['is_smoking'], product['name'], id))
-        query_ads = sql.SQL("""
-                    INSERT INTO reklama (id_place, type, name, ishelth) VALUES (%s, %s, %s, %s);
-                    """)
-        for ad in place['ads']:
-            cursor.execute(query_ads, (id, ad['type'], ad['name'], ad['is_health']))
-
-        query_sport = sql.SQL(
-            """ INSERT INTO sport_interfaces_place (id_place, id_interface, count) VALUES (%s, %s, %s)"""
-        )
-
-        for sport in place['sports']:
-            cursor.execute(query_sport, (id, sport['type'], sport['count']))
+            for sport in place['equipment']:
+                cursor.execute(query_sport, (id, sport['type'], sport['count']))
         return id
 
     except (Exception, psycopg2.DatabaseError) as error:

@@ -7,6 +7,7 @@ from starlette.middleware.cors import CORSMiddleware as cors
 
 import os
 from db.map import get_all_places, add_place, get_all_types, get_place, update_place_info
+from db.user import create_user, login_user, add_review, get_all_users, get_user_by_id, delete_review
 
 from typing import Dict, Any, Optional, List
 from typing import Dict, Any, Optional, List
@@ -175,3 +176,98 @@ async def add_place_info_h(id: int, data: placeUpdateData):
 
 
 app.include_router(place_router, prefix="/place", tags=["place"])
+
+# User router
+user_router = APIRouter()
+
+
+class UserCreateData(BaseModel):
+    name: str
+    email: str
+    password: str
+
+
+class UserLoginData(BaseModel):
+    email: str
+    password: str
+
+
+class UserReviewData(BaseModel):
+    message: str
+    user_id: int
+    place_id: int
+
+
+class UserResponseData(BaseModel):
+    user_id: int
+    name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    photo: Optional[str] = None
+    rating: Optional[int] = None
+
+
+class UserDeleteReviewData(BaseModel):
+    user_id: int
+    review_id: int
+
+
+@user_router.post("/create")
+async def create_user_h(data: UserCreateData) -> dict:
+    """Создает нового пользователя"""
+    user_id = await create_user(data.name, data.email, data.password)
+    if user_id is None:
+        raise HTTPException(status_code=400, detail="User already exists or error occurred")
+    return {"user_id": user_id}
+
+
+@user_router.post("/login")
+async def login_user_h(data: UserLoginData) -> dict:
+    """Авторизует пользователя"""
+    user_id = await login_user(data.email, data.password)
+    if user_id is None:
+        raise HTTPException(status_code=400, detail="Invalid email or password")
+    return {"user_id": user_id}
+
+
+@user_router.post("/review")
+async def add_review_h(data: UserReviewData):
+    """Добавляет отзыв"""
+    # Проверяем, что сообщение не пустое
+    if not data.message or not data.message.strip():
+        raise HTTPException(status_code=418, detail="isNoGoodMessage")
+    
+    result = await add_review(data.message, data.user_id, data.place_id)
+    if not result:
+        raise HTTPException(status_code=400, detail="error")
+    return {"status": "ok"}
+
+
+@user_router.get("/{id}", response_model=UserResponseData)
+async def get_user_h(id: int):
+    """Возвращает информацию о пользователе по ID"""
+    user = await get_user_by_id(id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
+
+
+@user_router.get("/", response_model=List[UserResponseData])
+async def get_all_users_h():
+    """Возвращает список всех пользователей"""
+    users = await get_all_users()
+    return users
+
+
+@user_router.delete("/review")
+async def delete_review_h(data: UserDeleteReviewData):
+    """Удаляет отзыв"""
+    result = await delete_review(data.user_id, data.review_id)
+    if result == 'not_author':
+        raise HTTPException(status_code=418, detail="ты не автор")
+    elif result == 'error':
+        raise HTTPException(status_code=400, detail="some err")
+    return {"status": "ok"}
+
+
+app.include_router(user_router, prefix="/user", tags=["user"])

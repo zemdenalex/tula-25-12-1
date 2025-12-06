@@ -363,3 +363,94 @@ returning id;
             cursor.close()
             connection.close()
             logger.info('Database connection closed.')
+
+
+async def update_place_info(place_id: int, place_data: dict) -> bool:
+    connection = db_connection()
+    cursor = connection.cursor()
+
+    try:
+        # Check if place exists
+        check_query = sql.SQL("SELECT id FROM places WHERE id = %s")
+        cursor.execute(check_query, (place_id,))
+        if not cursor.fetchone():
+            return False
+
+        # Build UPDATE query dynamically based on provided fields
+        # Note: name, type, coord1, coord2 are protected and cannot be changed
+        update_fields = []
+        update_values = []
+        
+        if 'info' in place_data and place_data['info'] is not None:
+            update_fields.append("info = %s")
+            update_values.append(place_data['info'])
+        if 'food_type' in place_data and place_data['food_type'] is not None:
+            update_fields.append("foodtype = %s")
+            update_values.append(place_data['food_type'])
+        if 'is_alcohol' in place_data and place_data['is_alcohol'] is not None:
+            update_fields.append("isalcohol = %s")
+            update_values.append(place_data['is_alcohol'])
+        if 'is_health' in place_data and place_data['is_health'] is not None:
+            update_fields.append("ishealth = %s")
+            update_values.append(place_data['is_health'])
+        if 'is_insurance' in place_data and place_data['is_insurance'] is not None:
+            update_fields.append("isinsurence = %s")
+            update_values.append(place_data['is_insurance'])
+        if 'is_nosmoking' in place_data and place_data['is_nosmoking'] is not None:
+            update_fields.append("isnosmoking = %s")
+            update_values.append(place_data['is_nosmoking'])
+        if 'is_smoke' in place_data and place_data['is_smoke'] is not None:
+            update_fields.append("issmoke = %s")
+            update_values.append(place_data['is_smoke'])
+        if 'rating' in place_data and place_data['rating'] is not None:
+            update_fields.append("rating = %s")
+            update_values.append(place_data['rating'])
+        if 'sport_type' in place_data and place_data['sport_type'] is not None:
+            update_fields.append("sporttype = %s")
+            update_values.append(place_data['sport_type'])
+
+        # Update main place fields if any were provided
+        if update_fields:
+            update_query = "UPDATE places SET " + ", ".join(update_fields) + " WHERE id = %s"
+            update_values.append(place_id)
+            cursor.execute(update_query, tuple(update_values))
+
+        # Add new products if provided
+        if 'products' in place_data and place_data['products']:
+            query_product = sql.SQL("""
+                INSERT INTO product (type, min_cost, ishealth, isalcohol, issmoking, name, id_place) 
+                VALUES (%s, %s, %s, %s, %s, %s, %s);
+            """)
+            for product in place_data['products']:
+                cursor.execute(query_product,
+                             (product.get('type'), product.get('min_cost'), product.get('is_health'),
+                              product.get('is_alcohol'), product.get('is_smoking'), product.get('name'), place_id))
+
+        # Add new ads if provided
+        if 'ads' in place_data and place_data['ads']:
+            query_ads = sql.SQL("""
+                INSERT INTO reklama (id_place, type, name, ishelth) VALUES (%s, %s, %s, %s);
+            """)
+            for ad in place_data['ads']:
+                cursor.execute(query_ads, (place_id, ad.get('type'), ad.get('name'), ad.get('is_health')))
+
+        # Add new equipment if provided
+        if 'equipment' in place_data and place_data['equipment']:
+            query_sport = sql.SQL("""
+                INSERT INTO sport_interfaces_place (id_place, id_interface, count) VALUES (%s, %s, %s)
+            """)
+            for sport in place_data['equipment']:
+                cursor.execute(query_sport, (place_id, sport.get('type'), sport.get('count')))
+
+        cursor.connection.commit()
+        return True
+
+    except (Exception, psycopg2.DatabaseError) as error:
+        logger.error(error)
+        cursor.connection.rollback()
+        return False
+    finally:
+        if connection:
+            cursor.close()
+            connection.close()
+            logger.info('Database connection closed.')

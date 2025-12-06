@@ -6,7 +6,7 @@ from fastapi import FastAPI, HTTPException, APIRouter, Request, Response, Query
 from starlette.middleware.cors import CORSMiddleware as cors
 
 import os
-from db.map import get_all_places, add_place, get_all_types, get_place
+from db.map import get_all_places, add_place, get_all_types, get_place, update_place_info
 
 from typing import Dict, Any, Optional, List
 from typing import Dict, Any, Optional, List
@@ -58,6 +58,7 @@ class productData(BaseModel):
 class equipmentData(BaseModel):
     name: Optional[str] = None
     count: Optional[int] = None
+    type: Optional[int] = None  # ID интерфейса для создания/обновления
 
 
 class adsData(BaseModel):
@@ -92,6 +93,21 @@ class placeData(BaseModel):
     products: Optional[list[productData]] = None
     equipment: Optional[list[equipmentData]] = None
     ads: Optional[list[equipmentData]] = None
+
+
+class placeUpdateData(BaseModel):
+    info: Optional[str] = None
+    food_type: Optional[int] = None
+    is_alcohol: Optional[bool] = None
+    is_health: Optional[bool] = None
+    is_insurance: Optional[bool] = None
+    is_nosmoking: Optional[bool] = None
+    is_smoke: Optional[bool] = None
+    rating: Optional[int] = None
+    sport_type: Optional[int] = None
+    products: Optional[list[productData]] = None
+    equipment: Optional[list[equipmentData]] = None
+    ads: Optional[list[adsData]] = None
 
 
 class placeResponseData(BaseModel):
@@ -145,6 +161,17 @@ async def add_point_h(data: placeData) -> int:
     if id is None:
         raise HTTPException(status_code=418, detail="i am a teapot ;)")
     return id
+
+
+@place_router.post("/add/{id}")
+async def add_place_info_h(id: int, data: placeUpdateData):
+    place = data.dict()
+    # Remove None values to allow partial updates
+    place = {k: v for k, v in place.items() if v is not None}
+    result = await update_place_info(id, place)
+    if not result:
+        raise HTTPException(status_code=418, detail="i am a teapot ;)")
+    return {"success": True, "message": f"Information added to place {id}"}
 
 
 app.include_router(place_router, prefix="/place", tags=["place"])

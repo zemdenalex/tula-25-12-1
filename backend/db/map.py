@@ -6,8 +6,8 @@ import psycopg2
 from psycopg2 import sql
 import logging
 
-import backend.config as config
-from backend.db.migration import db_connection, db_config
+import config as config
+from db.migration import db_connection, db_config
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(

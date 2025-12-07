@@ -1,230 +1,200 @@
-<<<<<<< HEAD
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import BottomNav from '../components/BottomNav';
-import AuthModal from '../components/AuthModal';
-import { FiArrowLeft, FiUsers, FiStar, FiThumbsUp, FiChevronRight, FiUserPlus } from 'react-icons/fi';
+import { FiChevronLeft, FiStar, FiThumbsUp, FiUsers, FiAward, FiUserPlus, FiUserCheck } from 'react-icons/fi';
 import { api } from '../api';
+
+interface UserData {
+  user_id: number;
+  name: string;
+  email: string;
+  phone: string;
+  photo: string;
+  rating: number;
+}
+
+interface Achievement {
+  id: number;
+  name: string;
+  icon: string;
+  unlocked: boolean;
+}
 
 const UserProfilePage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
   const [isFollowing, setIsFollowing] = useState(false);
-  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [followLoading, setFollowLoading] = useState(false);
+
+  const [achievements] = useState<Achievement[]>([
+    { id: 1, name: 'Первый отзыв', icon: '📝', unlocked: true },
+    { id: 2, name: '10 отзывов', icon: '🏆', unlocked: true },
+    { id: 3, name: 'Популярный', icon: '⭐', unlocked: false },
+    { id: 4, name: 'Эксперт', icon: '🎯', unlocked: false },
+  ]);
+
+  const level = Math.floor((user?.rating || 0) / 500) + 1;
+  const currentLevelPoints = (user?.rating || 0) % 500;
+  const pointsToNextLevel = 500;
 
   useEffect(() => {
-    if (id) {
-      api.getUser(parseInt(id))
-        .then(setUser)
-        .catch(console.error)
-        .finally(() => setLoading(false));
-    }
+    fetchUser();
   }, [id]);
 
-  const handleFollow = async () => {
-    const currentUserId = localStorage.getItem('userId');
-    if (!currentUserId) { setShowAuthModal(true); return; }
+  const fetchUser = async () => {
     try {
-      await api.followUser(parseInt(currentUserId), parseInt(id!));
-      setIsFollowing(true);
+      const response = await api.get(`/user/${id}`);
+      setUser(response.data);
     } catch (error) {
-      console.error('Error:', error);
+      console.error('Error fetching user:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const level = user?.rating ? Math.floor(user.rating / 500) + 1 : 1;
-  const nextLevelPoints = level * 500;
-  const progressPercent = user?.rating ? ((user.rating - (level - 1) * 500) / 500) * 100 : 0;
+  const handleFollow = async () => {
+    const currentUserId = localStorage.getItem('userId');
+    if (!currentUserId || !id) return;
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500" /></div>;
+    setFollowLoading(true);
+    try {
+      await api.post('/user/follow/', {
+        user_id: parseInt(currentUserId),
+        follow_id: parseInt(id),
+      });
+      setIsFollowing(!isFollowing);
+    } catch (error) {
+      console.error('Error following user:', error);
+    } finally {
+      setFollowLoading(false);
+    }
+  };
 
-  return (
-    <div className="min-h-screen bg-gray-50 pb-20">
-      <div className="bg-white p-4">
-        <div className="flex items-center gap-4 mb-4">
-          <button onClick={() => navigate(-1)} className="p-2 hover:bg-gray-100 rounded-full"><FiArrowLeft className="w-5 h-5" /></button>
-          <h1 className="font-semibold text-lg">Профиль</h1>
-        </div>
-
-        <div className="flex items-start gap-4 mb-4">
-          <div className="w-20 h-20 bg-blue-100 rounded-xl flex items-center justify-center">
-            {user?.photo ? <img src={user.photo} alt="" className="w-full h-full object-cover rounded-xl" /> : <FiUsers className="w-8 h-8 text-blue-400" />}
-          </div>
-          <div className="flex-1">
-            <h2 className="font-semibold text-lg">{user?.name || 'Пользователь'}</h2>
-            <p className="text-gray-500 text-sm">{level} уровень</p>
-            <div className="mt-2">
-              <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                <div className="h-full bg-gradient-to-r from-blue-400 to-blue-600" style={{ width: `${progressPercent}%` }} />
-              </div>
-              <div className="flex justify-between text-xs mt-1">
-                <span className="text-gray-400">{Math.round(progressPercent)}%</span>
-                <span><span className="text-blue-500 font-medium">{user?.rating || 0}</span><span className="text-gray-400"> / {nextLevelPoints}</span></span>
-              </div>
-=======
-import { ArrowLeft, UserPlus, Trophy, Star, MapPin, MessageCircle } from 'lucide-react';
-import { useStore } from '../store';
-
-export default function UserProfilePage() {
-  const { viewedUser, setCurrentPage, user, setAuthModalOpen } = useStore();
-
-  if (!viewedUser) {
+  if (loading) {
     return (
-      <div className="h-full flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <p className="text-gray-500">Пользователь не найден</p>
       </div>
     );
   }
 
-  const handleAddFriend = () => {
-    if (!user) {
-      setAuthModalOpen(true);
-      return;
-    }
-    alert('Заявка отправлена!');
-  };
-
-  const handleMessage = () => {
-    if (!user) {
-      setAuthModalOpen(true);
-      return;
-    }
-    alert('Функция в разработке');
-  };
-
   return (
-    <div className="h-full overflow-y-auto bg-gray-50 pb-20">
-      <div className="bg-primary-500 px-6 pt-6 pb-12">
-        <div className="flex items-center gap-4 mb-6">
-          <button
-            onClick={() => setCurrentPage('leaderboard')}
-            className="p-2 bg-white/20 rounded-xl text-white"
-          >
-            <ArrowLeft size={20} />
-          </button>
-          <h1 className="text-xl font-bold text-white">Профиль</h1>
-        </div>
-
-        <div className="flex items-center gap-4">
-          <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center text-primary-600 text-2xl font-bold">
-            {viewedUser.name?.charAt(0).toUpperCase() || 'U'}
-          </div>
-          <div className="flex-1">
-            <h2 className="text-xl font-semibold text-white">{viewedUser.name || 'Пользователь'}</h2>
-            <p className="text-white/80">Участник сообщества</p>
-          </div>
-        </div>
-      </div>
-
-      <div className="px-6 -mt-6">
-        <div className="card p-4 mb-4">
-          <div className="grid grid-cols-3 gap-4 text-center">
-            <div>
-              <div className="flex items-center justify-center gap-1 text-2xl font-bold text-gray-900">
-                <Trophy size={20} className="text-yellow-500" />
-                {viewedUser.rating || 0}
-              </div>
-              <p className="text-sm text-gray-500">Очков</p>
-            </div>
-            <div>
-              <div className="flex items-center justify-center gap-1 text-2xl font-bold text-gray-900">
-                <Star size={20} className="text-primary-500" />
-                8
-              </div>
-              <p className="text-sm text-gray-500">Отзывов</p>
-            </div>
-            <div>
-              <div className="flex items-center justify-center gap-1 text-2xl font-bold text-gray-900">
-                <MapPin size={20} className="text-green-500" />
-                15
-              </div>
-              <p className="text-sm text-gray-500">Мест</p>
->>>>>>> aa80096d1e1cd0a3c22ab9abec960d40bad68eaa
-            </div>
-          </div>
-        </div>
-
-<<<<<<< HEAD
-        <button onClick={handleFollow} disabled={isFollowing} className={`w-full py-3 rounded-xl font-medium flex items-center justify-center gap-2 ${isFollowing ? 'bg-gray-100 text-gray-500' : 'bg-blue-500 text-white hover:bg-blue-600'}`}>
-          <FiUserPlus className="w-5 h-5" />{isFollowing ? 'Подписан' : 'Подписаться'}
+    <div className="min-h-screen bg-gray-50 pb-20">
+      <header className="bg-white px-4 py-3 flex items-center gap-3 border-b sticky top-0 z-10">
+        <button onClick={() => navigate(-1)} className="p-2 hover:bg-gray-100 rounded-full">
+          <FiChevronLeft className="w-6 h-6" />
         </button>
+        <h1 className="text-lg font-semibold">Профиль</h1>
+      </header>
 
-        <div className="grid grid-cols-3 gap-3 mt-4">
-          <div className="bg-gray-50 rounded-xl p-3 text-center">
-            <div className="flex items-center justify-center gap-1"><FiStar className="w-4 h-4 text-gray-400" /><span className="font-semibold">25</span></div>
-            <p className="text-xs text-gray-500 mt-1">Достижений</p>
+      <div className="p-4">
+        <div className="bg-white rounded-2xl p-4 mb-4">
+          <div className="flex items-start gap-4">
+            <div className="w-20 h-20 bg-blue-100 rounded-2xl flex items-center justify-center overflow-hidden">
+              {user.photo ? (
+                <img src={user.photo} alt={user.name} className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-3xl text-blue-600">{user.name?.charAt(0) || '?'}</span>
+              )}
+            </div>
+            <div className="flex-1">
+              <h2 className="text-xl font-semibold">{user.name}</h2>
+              <p className="text-gray-500">{level} уровень</p>
+              <div className="mt-2">
+                <div className="flex items-center justify-between text-sm mb-1">
+                  <span className="text-gray-500">{Math.round((currentLevelPoints / pointsToNextLevel) * 100)}%</span>
+                  <span><span className="text-blue-600 font-medium">{user.rating || 0}</span> / {level * 500 + 500}</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div 
+                    className="bg-gradient-to-r from-blue-500 to-blue-600 h-2 rounded-full transition-all"
+                    style={{ width: `${(currentLevelPoints / pointsToNextLevel) * 100}%` }}
+                  ></div>
+                </div>
+              </div>
+            </div>
           </div>
-          <div className="bg-gray-50 rounded-xl p-3 text-center">
-            <div className="flex items-center justify-center gap-1"><FiThumbsUp className="w-4 h-4 text-gray-400" /><span className="font-semibold">15</span></div>
-            <p className="text-xs text-gray-500 mt-1">Лайков</p>
+
+          <button
+            onClick={handleFollow}
+            disabled={followLoading}
+            className={`w-full mt-4 py-3 rounded-xl font-medium flex items-center justify-center gap-2 transition-colors ${
+              isFollowing 
+                ? 'bg-gray-100 text-gray-700 hover:bg-gray-200' 
+                : 'bg-blue-600 text-white hover:bg-blue-700'
+            }`}
+          >
+            {isFollowing ? (
+              <>
+                <FiUserCheck className="w-5 h-5" />
+                Вы подписаны
+              </>
+            ) : (
+              <>
+                <FiUserPlus className="w-5 h-5" />
+                Подписаться
+              </>
+            )}
+          </button>
+        </div>
+
+        <div className="grid grid-cols-3 gap-3 mb-4">
+          <div className="bg-white rounded-2xl p-4 text-center">
+            <div className="flex items-center justify-center gap-1 mb-1">
+              <FiAward className="w-5 h-5 text-gray-400" />
+              <span className="text-xl font-bold">{achievements.filter(a => a.unlocked).length}</span>
+            </div>
+            <p className="text-xs text-gray-500">Достижений</p>
           </div>
-          <div className="bg-gray-50 rounded-xl p-3 text-center">
-            <div className="flex items-center justify-center gap-1"><FiUsers className="w-4 h-4 text-gray-400" /><span className="font-semibold">1000</span></div>
-            <p className="text-xs text-gray-500 mt-1">Подписчиков</p>
+          <div className="bg-white rounded-2xl p-4 text-center">
+            <div className="flex items-center justify-center gap-1 mb-1">
+              <FiThumbsUp className="w-5 h-5 text-gray-400" />
+              <span className="text-xl font-bold">15</span>
+            </div>
+            <p className="text-xs text-gray-500">Лайков</p>
+          </div>
+          <div className="bg-white rounded-2xl p-4 text-center">
+            <div className="flex items-center justify-center gap-1 mb-1">
+              <FiUsers className="w-5 h-5 text-gray-400" />
+              <span className="text-xl font-bold">1000</span>
+            </div>
+            <p className="text-xs text-gray-500">Подписчиков</p>
           </div>
         </div>
-      </div>
 
-      <div className="bg-white mt-2 p-4">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold">Достижения</h3>
-          <FiChevronRight className="w-5 h-5 text-gray-400" />
-        </div>
-        <div className="flex gap-3">
-          {['🏆', '⭐', '🎯', '🔥'].map((icon, i) => (
-            <div key={i} className="w-16 h-16 bg-blue-50 rounded-xl flex items-center justify-center"><span className="text-2xl">{icon}</span></div>
-          ))}
+        <div className="bg-white rounded-2xl p-4">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold">Достижения</h3>
+            <button className="text-sm text-blue-600">Все</button>
+          </div>
+          <div className="flex gap-3">
+            {achievements.map((achievement) => (
+              <div 
+                key={achievement.id}
+                className={`w-16 h-16 rounded-xl flex items-center justify-center text-2xl ${
+                  achievement.unlocked ? 'bg-blue-100' : 'bg-gray-100 opacity-50'
+                }`}
+              >
+                {achievement.icon}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
       <BottomNav />
-      <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} onSuccess={(id) => { setShowAuthModal(false); localStorage.setItem('userId', id.toString()); }} />
     </div>
   );
 };
 
 export default UserProfilePage;
-=======
-        <div className="flex gap-3 mb-6">
-          <button
-            onClick={handleAddFriend}
-            className="flex-1 btn-primary flex items-center justify-center gap-2"
-          >
-            <UserPlus size={18} />
-            Добавить в друзья
-          </button>
-          <button
-            onClick={handleMessage}
-            className="p-3 bg-gray-100 rounded-xl text-gray-600 hover:bg-gray-200 transition-colors"
-          >
-            <MessageCircle size={20} />
-          </button>
-        </div>
-
-        <div className="card p-4">
-          <h3 className="font-semibold text-gray-900 mb-4">Достижения</h3>
-          <div className="flex flex-wrap gap-2">
-            {['🌟', '📍', '💚'].map((emoji, index) => (
-              <div key={index} className="w-12 h-12 bg-primary-50 rounded-xl flex items-center justify-center text-xl">
-                {emoji}
-              </div>
-            ))}
-            <div className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center text-gray-400 text-sm">
-              +5
-            </div>
-          </div>
-        </div>
-
-        <div className="card p-4 mt-4">
-          <h3 className="font-semibold text-gray-900 mb-4">Последние отзывы</h3>
-          <div className="text-center py-4 text-gray-500 text-sm">
-            Нет доступных отзывов
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
->>>>>>> aa80096d1e1cd0a3c22ab9abec960d40bad68eaa

@@ -150,17 +150,29 @@ async def add_review(message: str, user_id: int, place_id: int, rating: int, pho
             logger.info('Database connection closed.')
 
 
-async def get_all_users() -> list:
+async def get_all_users(limit: Optional[int] = None, offset: Optional[int] = None, page: Optional[int] = None) -> list:
     """Возвращает список всех пользователей"""
     connection = db_connection()
     cursor = connection.cursor()
 
     try:
-        query = sql.SQL("""
+        base_query = """
             SELECT id, name, email, phone, rating
             FROM users
             ORDER BY id
-        """)
+        """
+        
+        # Добавляем LIMIT и OFFSET если они указаны
+        if limit is not None:
+            if offset is not None and page is not None:
+                calculated_offset = offset * page
+                base_query += f" LIMIT {limit} OFFSET {calculated_offset}"
+            elif offset is not None:
+                base_query += f" LIMIT {limit} OFFSET {offset}"
+            else:
+                base_query += f" LIMIT {limit}"
+        
+        query = sql.SQL(base_query)
         cursor.execute(query)
 
         rows = cursor.fetchall()
@@ -496,14 +508,14 @@ async def add_follow(user_id: int, follow_id: int) -> bool:
             logger.info('Database connection closed.')
 
 
-async def get_followed_reviews(user_id: int) -> list:
+async def get_followed_reviews(user_id: int, limit: Optional[int] = None, offset: Optional[int] = None, page: Optional[int] = None) -> list:
     """Возвращает список отзывов от пользователей, на которых подписан user_id, отсортированные по id отзыва"""
     connection = db_connection()
     cursor = connection.cursor()
 
     try:
         # Получаем все отзывы от пользователей, на которых подписан user_id
-        query = sql.SQL("""
+        base_query = """
             SELECT 
                 r.id,
                 r.idUser,
@@ -516,7 +528,19 @@ async def get_followed_reviews(user_id: int) -> list:
             INNER JOIN users u ON r.idUser = u.id
             WHERE f.user_id = %s
             ORDER BY r.id
-        """)
+        """
+        
+        # Добавляем LIMIT и OFFSET если они указаны
+        if limit is not None:
+            if offset is not None and page is not None:
+                calculated_offset = offset * page
+                base_query += f" LIMIT {limit} OFFSET {calculated_offset}"
+            elif offset is not None:
+                base_query += f" LIMIT {limit} OFFSET {offset}"
+            else:
+                base_query += f" LIMIT {limit}"
+        
+        query = sql.SQL(base_query)
         cursor.execute(query, (user_id,))
         
         rows = cursor.fetchall()

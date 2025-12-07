@@ -155,8 +155,12 @@ class placeResponseData(BaseModel):
 
 
 @place_router.get("/", response_model=List[placeResponseData])
-async def get_all_points_h():
-    all_points = await get_all_places()
+async def get_all_points_h(
+    limit: Optional[int] = Query(None),
+    offset: Optional[int] = Query(None),
+    page: Optional[int] = Query(None)
+):
+    all_points = await get_all_places(limit=limit, offset=offset, page=page)
     if not all_points:
         raise HTTPException(status_code=418, detail="i am a teapot ;)")
     return all_points
@@ -215,7 +219,10 @@ async def search_places_h(
     has_ads_type: Optional[List[int]] = Query(None),
     need_products: Optional[bool] = Query(None),
     need_equipment: Optional[bool] = Query(None),
-    need_ads: Optional[bool] = Query(None)
+    need_ads: Optional[bool] = Query(None),
+    limit: Optional[int] = Query(None),
+    offset: Optional[int] = Query(None),
+    page: Optional[int] = Query(None)
 ):
     """
     Поиск мест по фильтрам:
@@ -243,7 +250,10 @@ async def search_places_h(
         has_ads_type=has_ads_type,
         need_products=need_products,
         need_equipment=need_equipment,
-        need_ads=need_ads
+        need_ads=need_ads,
+        limit=limit,
+        offset=offset,
+        page=page
     )
     return places
 
@@ -355,9 +365,13 @@ async def get_user_h(id: int):
 
 
 @user_router.get("/", response_model=List[UserResponseData])
-async def get_all_users_h():
+async def get_all_users_h(
+    limit: Optional[int] = Query(None),
+    offset: Optional[int] = Query(None),
+    page: Optional[int] = Query(None)
+):
     """Возвращает список всех пользователей"""
-    users = await get_all_users()
+    users = await get_all_users(limit=limit, offset=offset, page=page)
     return users
 
 
@@ -398,9 +412,14 @@ async def add_follow_h(data: FollowData):
 
 
 @user_router.get("/follow/{user_id}", response_model=List[reviewData])
-async def get_followed_reviews_h(user_id: int):
+async def get_followed_reviews_h(
+    user_id: int,
+    limit: Optional[int] = Query(None),
+    offset: Optional[int] = Query(None),
+    page: Optional[int] = Query(None)
+):
     """Возвращает список отзывов от пользователей, на которых подписан user_id, отсортированные по id отзыва"""
-    reviews = await get_followed_reviews(user_id)
+    reviews = await get_followed_reviews(user_id, limit=limit, offset=offset, page=page)
     return reviews
 
 

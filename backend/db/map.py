@@ -21,19 +21,31 @@ logging.basicConfig(
 )
 
 
-async def get_all_places() -> list:
+async def get_all_places(limit: Optional[int] = None, offset: Optional[int] = None, page: Optional[int] = None) -> list:
     connection = db_connection()
     cursor = connection.cursor()
 
     try:
-        query = sql.SQL("""
+        base_query = """
 SELECT p.id, p.name, p.coord1, p.coord2, pt.type, ft.type,
     p.isalcohol, p.ishealth, p.isinsurence, p.isnosmoking, p.issmoke, p.rating, st.type, p.info
 FROM places p
 LEFT JOIN places_type pt ON p.type = pt.id
 LEFT JOIN food_type ft ON p.foodtype = ft.id
-LEFT JOIN sport_type st ON st.id = p.sporttype; 
-        """)
+LEFT JOIN sport_type st ON st.id = p.sporttype
+        """
+        
+        # Добавляем LIMIT и OFFSET если они указаны
+        if limit is not None:
+            if offset is not None and page is not None:
+                calculated_offset = offset * page
+                base_query += f" LIMIT {limit} OFFSET {calculated_offset}"
+            elif offset is not None:
+                base_query += f" LIMIT {limit} OFFSET {offset}"
+            else:
+                base_query += f" LIMIT {limit}"
+        
+        query = sql.SQL(base_query)
         cursor.execute(query)
 
         rows = cursor.fetchall()
@@ -678,7 +690,10 @@ async def search_places(
     has_ads_type: Optional[List[int]] = None,
     need_products: Optional[bool] = None,
     need_equipment: Optional[bool] = None,
-    need_ads: Optional[bool] = None
+    need_ads: Optional[bool] = None,
+    limit: Optional[int] = None,
+    offset: Optional[int] = None,
+    page: Optional[int] = None
 ) -> list:
     """
     Поиск мест по фильтрам:
@@ -779,6 +794,16 @@ WHERE p.coord1 IS NOT NULL AND p.coord2 IS NOT NULL
         # Добавляем условия к запросу
         if conditions:
             base_query += " AND " + " AND ".join(conditions)
+        
+        # Добавляем LIMIT и OFFSET если они указаны
+        if limit is not None:
+            if offset is not None and page is not None:
+                calculated_offset = offset * page
+                base_query += f" LIMIT {limit} OFFSET {calculated_offset}"
+            elif offset is not None:
+                base_query += f" LIMIT {limit} OFFSET {offset}"
+            else:
+                base_query += f" LIMIT {limit}"
         
         query = sql.SQL(base_query)
         cursor.execute(query, tuple(params))

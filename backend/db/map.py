@@ -45,8 +45,8 @@ LEFT JOIN sport_type st ON st.id = p.sporttype
             else:
                 base_query += f" LIMIT {limit}"
         
-        query = sql.SQL(base_query)
-        cursor.execute(query)
+        # Выполняем запрос напрямую, так как LIMIT/OFFSET не могут быть параметрами
+        cursor.execute(base_query)
 
         rows = cursor.fetchall()
         places = []
@@ -805,10 +805,12 @@ WHERE p.coord1 IS NOT NULL AND p.coord2 IS NOT NULL
             else:
                 base_query += f" LIMIT {limit}"
         
-        query = sql.SQL(base_query)
-        cursor.execute(query, tuple(params))
+        # Выполняем запрос напрямую, так как LIMIT/OFFSET не могут быть параметрами
+        logger.debug(f"Executing query: {base_query[:200]}... with params: {params}")
+        cursor.execute(base_query, tuple(params))
         
         rows = cursor.fetchall()
+        logger.debug(f"Found {len(rows)} rows")
         places = []
         for row in rows:
             id = row[0]

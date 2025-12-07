@@ -213,7 +213,7 @@ async def search_places_h(
     is_nosmoking: Optional[bool] = Query(None),
     is_smoke: Optional[bool] = Query(None),
     max_distance: Optional[float] = Query(5),
-    is_moderated: Optional[bool] = Query(True),
+    is_moderated: Optional[bool] = Query(None),
     has_product_type: Optional[List[int]] = Query(None),
     has_equipment_type: Optional[List[int]] = Query(None),
     has_ads_type: Optional[List[int]] = Query(None),

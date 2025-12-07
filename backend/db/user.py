@@ -172,8 +172,8 @@ async def get_all_users(limit: Optional[int] = None, offset: Optional[int] = Non
             else:
                 base_query += f" LIMIT {limit}"
         
-        query = sql.SQL(base_query)
-        cursor.execute(query)
+        # Выполняем запрос напрямую, так как LIMIT/OFFSET не могут быть параметрами
+        cursor.execute(base_query)
 
         rows = cursor.fetchall()
         users = []
@@ -540,8 +540,8 @@ async def get_followed_reviews(user_id: int, limit: Optional[int] = None, offset
             else:
                 base_query += f" LIMIT {limit}"
         
-        query = sql.SQL(base_query)
-        cursor.execute(query, (user_id,))
+        # Выполняем запрос напрямую, так как LIMIT/OFFSET не могут быть параметрами
+        cursor.execute(base_query, (user_id,))
         
         rows = cursor.fetchall()
         reviews = []

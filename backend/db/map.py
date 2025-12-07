@@ -17,12 +17,35 @@ logging.basicConfig(
 )
 
 
+def log_and_execute(cursor, query, params=None):
+    """Выполняет SQL запрос с логированием"""
+    if params:
+        # Формируем запрос с подстановкой параметров для логирования
+        log_query = query
+        if isinstance(params, tuple):
+            params_list = list(params)
+        else:
+            params_list = [params] if params else []
+        for param in params_list:
+            if isinstance(param, str):
+                escaped_param = param.replace("'", "''")  # Экранируем одинарные кавычки
+                log_query = log_query.replace('%s', f"'{escaped_param}'", 1)
+            else:
+                log_query = log_query.replace('%s', str(param), 1)
+        logger.info(f"Executing SQL query: {log_query}")
+        logger.info(f"Query params: {params}")
+        cursor.execute(query, params)
+    else:
+        logger.info(f"Executing SQL query: {query}")
+        cursor.execute(query)
+
+
 async def get_all_places(limit: Optional[int] = None, offset: Optional[int] = None, page: Optional[int] = None) -> list:
     connection = db_connection()
     cursor = connection.cursor()
 
     try:
-        base_query = """
+        query = """
 SELECT p.id, p.name, p.coord1, p.coord2, pt.type, ft.type,
     p.isalcohol, p.ishealth, p.isinsurence, p.isnosmoking, p.issmoke, p.rating, st.type, p.info
 FROM places p
@@ -31,27 +54,31 @@ LEFT JOIN food_type ft ON p.foodtype = ft.id
 LEFT JOIN sport_type st ON st.id = p.sporttype
         """
 
+        # Добавляем LIMIT и OFFSET
         if limit is not None:
             if offset is not None and page is not None:
                 calculated_offset = offset
                 base_query += f" LIMIT {limit} OFFSET {calculated_offset}"
             elif offset is not None:
-                base_query += f" LIMIT {limit} OFFSET {offset}"
+                query += f" LIMIT {limit} OFFSET {offset}"
             else:
-                base_query += f" LIMIT {limit}"
+                query += f" LIMIT {limit}"
 
-        cursor.execute(base_query)
+        logger.info(f"Executing SQL query: {query}")
+        cursor.execute(query)
 
         rows = cursor.fetchall()
+        logger.info(f"Found {len(rows)} places in database")
         places = []
         for row in rows:
             id = row[0]
 
-            query_product = sql.SQL("""
+            query_product = """
             SELECT id, (SELECT product_type.type from product_type where product_type.id = product.type),
             min_cost, ishealth, isalcohol, issmoking, name 
             from product where id_place = %s
-            """)
+            """
+            logger.info(f"Executing SQL query: {query_product} with params: ({id},)")
             cursor.execute(query_product, (id,))
             rows_product = cursor.fetchall()
             products = []
@@ -66,12 +93,12 @@ LEFT JOIN sport_type st ON st.id = p.sporttype
                     "name": row_p[6]
                 }
                 products.append(product)
-            query_ads = sql.SQL("""
+            query_ads = """
                         SELECT id, (SELECT reklama_type.type from reklama_type where reklama_type.id = reklama.type),
                         name, ishelth 
                         from reklama where id_place = %s
-                        """)
-            cursor.execute(query_ads, (id,))
+                        """
+            log_and_execute(cursor, query_ads, (id,))
             rows_ads = cursor.fetchall()
             ads = []
             for row_a in rows_ads:
@@ -83,12 +110,9 @@ LEFT JOIN sport_type st ON st.id = p.sporttype
                 }
                 ads.append(ad)
 
-            query_review = sql.SQL(
-                """SELECT id, iduser, (SELECT users.name from users where users.id = reviews.iduser), idplace, text 
+            query_review = """SELECT id, iduser, (SELECT users.name from users where users.id = reviews.iduser), idplace, text 
                 from reviews where idplace=%s"""
-
-            )
-
+            logger.info(f"Executing SQL query: {query_review} with params: ({id},)")
             cursor.execute(query_review, (id,))
             rows_review = cursor.fetchall()
             reviews = []
@@ -125,12 +149,9 @@ LEFT JOIN sport_type st ON st.id = p.sporttype
                 }
                 reviews.append(review)
 
-            query_sport = sql.SQL(
-                """SELECT (SELECT type from sport_interfaces as si where si.id = sip.id_interface), count 
+            query_sport = """SELECT (SELECT type from sport_interfaces as si where si.id = sip.id_interface), count 
                 from sport_interfaces_place as sip where id_place = %s"""
-            )
-
-            cursor.execute(query_sport, (id,))
+            log_and_execute(cursor, query_sport, (id,))
             rows_sport = cursor.fetchall()
             sports = []
             for row_s in rows_sport:
@@ -181,25 +202,25 @@ async def get_place(id):
     out = dict()
 
     try:
-        query = sql.SQL("""
+        query = """
 SELECT p.id, p.name, p.coord1, p.coord2, pt.type, ft.type,
     p.isalcohol, p.ishealth, p.isinsurence, p.isnosmoking, p.issmoke, p.rating, st.type, p.info
 FROM places p
 LEFT JOIN places_type pt ON p.type = pt.id
 LEFT JOIN food_type ft ON p.foodtype = ft.id
-LEFT JOIN sport_type st ON st.id = p.sporttype WHERE p.id = %s; 
-        """)
-        cursor.execute(query, (id,))
+LEFT JOIN sport_type st ON st.id = p.sporttype WHERE p.id = %s
+        """
+        log_and_execute(cursor, query, (id,))
 
         row = cursor.fetchone()
         id = row[0]
 
-        query_product = sql.SQL("""
+        query_product = """
         SELECT id, (SELECT product_type.type from product_type where product_type.id = product.type),
         min_cost, ishealth, isalcohol, issmoking, name 
         from product where id_place = %s
-        """)
-        cursor.execute(query_product, (id,))
+        """
+        log_and_execute(cursor, query_product, (id,))
         rows_product = cursor.fetchall()
         products = []
         for row_p in rows_product:
@@ -213,12 +234,12 @@ LEFT JOIN sport_type st ON st.id = p.sporttype WHERE p.id = %s;
                 "name": row_p[6]
             }
             products.append(product)
-        query_ads = sql.SQL("""
+        query_ads = """
                     SELECT id, (SELECT reklama_type.type from reklama_type where reklama_type.id = reklama.type),
                     name, ishelth 
                     from reklama where id_place = %s
-                    """)
-        cursor.execute(query_ads, (id,))
+                    """
+        log_and_execute(cursor, query_ads, (id,))
         rows_ads = cursor.fetchall()
         ads = []
         for row_a in rows_ads:
@@ -230,32 +251,26 @@ LEFT JOIN sport_type st ON st.id = p.sporttype WHERE p.id = %s;
             }
             ads.append(ad)
 
-        query_review = sql.SQL(
-            """SELECT id, iduser, (SELECT users.name from users where users.id = reviews.iduser), idplace, text, rating 
+        query_review = """SELECT id, iduser, (SELECT users.name from users where users.id = reviews.iduser), idplace, text, rating 
             from reviews where idplace=%s"""
-
-        )
-
-        cursor.execute(query_review, (id,))
+        log_and_execute(cursor, query_review, (id,))
         rows_review = cursor.fetchall()
         reviews = []
         for row_r in rows_review:
             review_id = row_r[0]
-            query_photos = sql.SQL("""
-                SELECT url FROM reviews_photo WHERE review_id = %s
-            """)
-            cursor.execute(query_photos, (review_id,))
+            query_photos = "SELECT url FROM reviews_photo WHERE review_id = %s"
+            log_and_execute(cursor, query_photos, (review_id,))
             rows_photos = cursor.fetchall()
             review_photos = [row_photo[0] for row_photo in rows_photos]
 
-            query_ranks = sql.SQL("""
+            query_ranks = """
                 SELECT 
                     COUNT(*) FILTER (WHERE "like" = true) as like_count,
                     COUNT(*) FILTER (WHERE dislike = true) as dislike_count
                 FROM reviews_ranks 
                 WHERE review_id = %s
-            """)
-            cursor.execute(query_ranks, (review_id,))
+            """
+            log_and_execute(cursor, query_ranks, (review_id,))
             ranks_row = cursor.fetchone()
             like_count = ranks_row[0] if ranks_row else 0
             dislike_count = ranks_row[1] if ranks_row else 0
@@ -273,12 +288,9 @@ LEFT JOIN sport_type st ON st.id = p.sporttype WHERE p.id = %s;
             }
             reviews.append(review)
 
-        query_sport = sql.SQL(
-            """SELECT (SELECT type from sport_interfaces as si where si.id = sip.id_interface), count 
+        query_sport = """SELECT (SELECT type from sport_interfaces as si where si.id = sip.id_interface), count 
             from sport_interfaces_place as sip where id_place = %s"""
-        )
-
-        cursor.execute(query_sport, (id,))
+        log_and_execute(cursor, query_sport, (id,))
         rows_sport = cursor.fetchall()
         sports = []
         for row_s in rows_sport:
@@ -288,19 +300,17 @@ LEFT JOIN sport_type st ON st.id = p.sporttype WHERE p.id = %s;
             }
             sports.append(sport)
 
-        query_review_rank = sql.SQL("""
+        query_review_rank = """
             SELECT COALESCE(AVG(rating)::numeric(10,2), 0)
             FROM reviews 
             WHERE idPlace = %s AND rating IS NOT NULL
-        """)
-        cursor.execute(query_review_rank, (id,))
+        """
+        log_and_execute(cursor, query_review_rank, (id,))
         review_rank_row = cursor.fetchone()
         review_rank = float(review_rank_row[0]) if review_rank_row[0] is not None else 0.0
 
-        query_photos = sql.SQL("""
-            SELECT url FROM places_photos WHERE place_id = %s
-        """)
-        cursor.execute(query_photos, (id,))
+        query_photos = "SELECT url FROM places_photos WHERE place_id = %s"
+        log_and_execute(cursor, query_photos, (id,))
         rows_photos = cursor.fetchall()
         photos = [row_photo[0] for row_photo in rows_photos]
 
@@ -695,7 +705,6 @@ FROM places p
 LEFT JOIN places_type pt ON p.type = pt.id
 LEFT JOIN food_type ft ON p.foodtype = ft.id
 LEFT JOIN sport_type st ON st.id = p.sporttype
-WHERE p.coord1 IS NOT NULL AND p.coord2 IS NOT NULL
         """
 
         conditions = []
@@ -768,8 +777,9 @@ WHERE p.coord1 IS NOT NULL AND p.coord2 IS NOT NULL
                 conditions.append("NOT EXISTS (SELECT 1 FROM reklama WHERE reklama.id_place = p.id)")
 
         if conditions:
-            base_query += " AND " + " AND ".join(conditions)
+            base_query += " WHERE " + " AND ".join(conditions)
 
+        # Добавляем LIMIT и OFFSET
         if limit is not None:
             if offset is not None and page is not None:
                 calculated_offset = offset
@@ -779,23 +789,22 @@ WHERE p.coord1 IS NOT NULL AND p.coord2 IS NOT NULL
             else:
                 base_query += f" LIMIT {limit}"
 
-        logger.debug(f"Executing query: {base_query[:200]}... with params: {params}")
-        cursor.execute(base_query, tuple(params))
+        log_and_execute(cursor, base_query, tuple(params))
 
         rows = cursor.fetchall()
-        logger.debug(f"Found {len(rows)} rows")
+        logger.info(f"Found {len(rows)} places matching search criteria")
         places = []
         for row in rows:
             id = row[0]
 
             products = []
             if need_products is True:
-                query_product = sql.SQL("""
+                query_product = """
                 SELECT id, (SELECT product_type.type from product_type where product_type.id = product.type),
                 min_cost, ishealth, isalcohol, issmoking, name 
                 from product where id_place = %s
-                """)
-                cursor.execute(query_product, (id,))
+                """
+                log_and_execute(cursor, query_product, (id,))
                 rows_product = cursor.fetchall()
                 for row_p in rows_product:
                     product = {
@@ -811,12 +820,12 @@ WHERE p.coord1 IS NOT NULL AND p.coord2 IS NOT NULL
 
             ads = []
             if need_ads is True:
-                query_ads = sql.SQL("""
+                query_ads = """
                             SELECT id, (SELECT reklama_type.type from reklama_type where reklama_type.id = reklama.type),
                             name, ishelth 
                             from reklama where id_place = %s
-                            """)
-                cursor.execute(query_ads, (id,))
+                            """
+                log_and_execute(cursor, query_ads, (id,))
                 rows_ads = cursor.fetchall()
                 for row_a in rows_ads:
                     ad = {
@@ -827,10 +836,9 @@ WHERE p.coord1 IS NOT NULL AND p.coord2 IS NOT NULL
                     }
                     ads.append(ad)
 
-            query_review = sql.SQL(
-                """SELECT id, iduser, (SELECT users.name from users where users.id = reviews.iduser), idplace, text 
+            query_review = """SELECT id, iduser, (SELECT users.name from users where users.id = reviews.iduser), idplace, text 
                 from reviews where idplace=%s"""
-            )
+            logger.info(f"Executing SQL query: {query_review} with params: ({id},)")
             cursor.execute(query_review, (id,))
             rows_review = cursor.fetchall()
             reviews = []
@@ -869,11 +877,9 @@ WHERE p.coord1 IS NOT NULL AND p.coord2 IS NOT NULL
 
             sports = []
             if need_equipment is True:
-                query_sport = sql.SQL(
-                    """SELECT (SELECT type from sport_interfaces as si where si.id = sip.id_interface), count 
+                query_sport = """SELECT (SELECT type from sport_interfaces as si where si.id = sip.id_interface), count 
                     from sport_interfaces_place as sip where id_place = %s"""
-                )
-                cursor.execute(query_sport, (id,))
+                log_and_execute(cursor, query_sport, (id,))
                 rows_sport = cursor.fetchall()
                 for row_s in rows_sport:
                     sport = {

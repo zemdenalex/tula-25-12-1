@@ -13,8 +13,36 @@ const LeaderboardPage: React.FC = () => {
     fetchUsers();
   }, [fetchUsers]);
 
-  // Sort users by rating
   const sortedUsers = [...users].sort((a, b) => (b.rating || 0) - (a.rating || 0));
+
+  const getDisplayRating = (rating: number | null | undefined): number => {
+    const r = rating || 0;
+    switch (period) {
+      case 'week':
+        return Math.round(r / 50);
+      case 'month':
+        return Math.round(r / 10);
+      case 'all':
+      default:
+        return r;
+    }
+  };
+
+  const formatPoints = (count: number): string => {
+    const lastTwo = count % 100;
+    const lastOne = count % 10;
+    
+    if (lastTwo >= 11 && lastTwo <= 19) {
+      return `${count} очков`;
+    }
+    if (lastOne === 1) {
+      return `${count} очко`;
+    }
+    if (lastOne >= 2 && lastOne <= 4) {
+      return `${count} очка`;
+    }
+    return `${count} очков`;
+  };
 
   const periods: { value: Period; label: string }[] = [
     { value: 'week', label: 'Эта неделя' },
@@ -26,7 +54,6 @@ const LeaderboardPage: React.FC = () => {
     <div className="max-w-2xl mx-auto px-4 py-6">
       <h1 className="text-2xl font-bold text-gray-900 text-center mb-6">Рейтинг</h1>
 
-      {/* Period tabs */}
       <div className="flex bg-gray-100 rounded-lg p-1 mb-6">
         {periods.map(({ value, label }) => (
           <button
@@ -43,7 +70,6 @@ const LeaderboardPage: React.FC = () => {
         ))}
       </div>
 
-      {/* Leaderboard list */}
       {isLoadingUsers ? (
         <div className="text-center py-12">
           <div className="animate-spin w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full mx-auto"></div>
@@ -57,7 +83,13 @@ const LeaderboardPage: React.FC = () => {
       ) : (
         <div className="space-y-3">
           {sortedUsers.map((user, index) => (
-            <LeaderboardItem key={user.user_id} user={user} rank={index + 1} />
+            <LeaderboardItem 
+              key={user.user_id} 
+              user={user} 
+              rank={index + 1} 
+              displayRating={getDisplayRating(user.rating)}
+              formatPoints={formatPoints}
+            />
           ))}
         </div>
       )}
@@ -68,9 +100,11 @@ const LeaderboardPage: React.FC = () => {
 interface LeaderboardItemProps {
   user: User;
   rank: number;
+  displayRating: number;
+  formatPoints: (count: number) => string;
 }
 
-const LeaderboardItem: React.FC<LeaderboardItemProps> = ({ user, rank }) => {
+const LeaderboardItem: React.FC<LeaderboardItemProps> = ({ user, rank, displayRating, formatPoints }) => {
   const isWinner = rank === 1;
 
   return (
@@ -78,12 +112,10 @@ const LeaderboardItem: React.FC<LeaderboardItemProps> = ({ user, rank }) => {
       to={`/user/${user.user_id}`}
       className="flex items-center p-4 bg-white rounded-xl border border-gray-100 hover:border-blue-200 hover:shadow-sm transition-all"
     >
-      {/* Rank */}
       <span className="text-lg font-medium text-gray-500 w-8">
         {rank}
       </span>
 
-      {/* Avatar */}
       <div className={`w-12 h-12 rounded-xl flex items-center justify-center mr-4 ${
         isWinner ? 'bg-blue-600' : 'bg-blue-500'
       }`}>
@@ -92,7 +124,6 @@ const LeaderboardItem: React.FC<LeaderboardItemProps> = ({ user, rank }) => {
         </span>
       </div>
 
-      {/* User info */}
       <div className="flex-1">
         <h3 className="font-medium text-gray-900">{user.name || 'Пользователь'}</h3>
         {isWinner && (
@@ -102,9 +133,8 @@ const LeaderboardItem: React.FC<LeaderboardItemProps> = ({ user, rank }) => {
         )}
       </div>
 
-      {/* Points */}
       <div className="px-3 py-1 bg-gray-100 rounded-lg">
-        <span className="font-medium text-gray-900">{user.rating || 0} птср</span>
+        <span className="font-medium text-gray-900">{formatPoints(displayRating)}</span>
       </div>
     </Link>
   );

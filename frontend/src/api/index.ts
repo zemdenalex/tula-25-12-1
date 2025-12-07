@@ -6,8 +6,10 @@ import type {
   AdminVerifyPlaceData, AdminDeleteReviewData
 } from '../types';
 
+const API_BASE = 'http://85.198.80.80:8000/api';
+
 export const api = axios.create({
-  baseURL: 'http://85.198.80.80:8000/api',
+  baseURL: API_BASE,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -121,7 +123,6 @@ export const photoApi = {
       method: 'POST',
       headers: {
         'Content-Type': contentType,
-        'Content-Length': String(uint8Array.length),
       },
       body: uint8Array,
     });
@@ -160,42 +161,6 @@ export const adminApi = {
 
   deleteReview: (data: AdminDeleteReviewData): Promise<void> => {
     return handleResponse(api.delete('/admin/review', { data }));
-  },
-  
-  getUser: async (id: number) => {
-    const response = await fetch(`/api/user/${id}`);
-    if (!response.ok) throw new Error('Failed to fetch user');
-    return response.json();
-  },
-
-  followUser: async (userId: number, followId: number) => {
-    const response = await fetch('/api/user/follow/', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: userId, follow_id: followId }),
-    });
-    if (!response.ok) throw new Error('Failed to follow user');
-    return response.json();
-  },
-
-  getPlaces: async (params: { page?: number; limit?: number; [key: string]: any }) => {
-    const searchParams = new URLSearchParams();
-    Object.entries(params).forEach(([key, value]) => {
-      if (value != null) searchParams.append(key, String(value));
-    });
-    const response = await fetch(`/api/place/search?${searchParams}`);
-    if (!response.ok) throw new Error('Failed to fetch places');
-    return response.json();
-  },
-
-  sendChatMessage: async (text: string) => {
-    const response = await fetch('/api/gpt/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text }),
-    });
-    if (!response.ok) throw new Error('Failed to send message');
-    return response.json();
   },
 };
 

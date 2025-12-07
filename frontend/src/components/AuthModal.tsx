@@ -58,22 +58,27 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login', onSuccess }: AuthMo
     try {
       if (isLogin) {
         const response = await api.post('/user/login', { email, password });
-        if (response.data.user_id) {
-          localStorage.setItem('userId', response.data.user_id.toString());
-          const userResponse = await api.get(`/user/${response.data.user_id}`);
-          setUser(userResponse.data);
-          onSuccess?.(response.data.user_id);
+        const userId = response.data.user_id;
+        if (userId) {
+          localStorage.setItem('userId', userId.toString());
+          try {
+            const userResponse = await api.get(`/user/${userId}`);
+            setUser(userResponse.data);
+          } catch {
+            setUser({ user_id: userId, email });
+          }
+          onSuccess?.(userId);
           onClose();
         } else {
           setError('Неверный email или пароль');
         }
       } else {
         const response = await api.post('/user/create', { name, email, password });
-        if (response.data.user_id) {
-          localStorage.setItem('userId', response.data.user_id.toString());
-          const userResponse = await api.get(`/user/${response.data.user_id}`);
-          setUser(userResponse.data);
-          onSuccess?.(response.data.user_id);
+        const userId = response.data.user_id;
+        if (userId) {
+          localStorage.setItem('userId', userId.toString());
+          setUser({ user_id: userId, name, email });
+          onSuccess?.(userId);
           onClose();
         } else {
           setError('Ошибка при регистрации');

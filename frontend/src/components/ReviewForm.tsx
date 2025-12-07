@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { useStore, uploadPhoto } from '../store';
+import { useStore } from '../store';
+import { photoApi } from '../api';
 import { StarIcon, PhotoIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
 
@@ -27,7 +28,6 @@ const ReviewForm: React.FC<ReviewFormProps> = ({ placeId, onSuccess, onCancel })
     const newFiles = Array.from(files);
     setPhotoFiles(prev => [...prev, ...newFiles]);
     
-    // Create preview URLs
     newFiles.forEach(file => {
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -65,14 +65,17 @@ const ReviewForm: React.FC<ReviewFormProps> = ({ placeId, onSuccess, onCancel })
     setError(null);
 
     try {
-      // Upload photos first if any
       let uploadedPhotoUrls: string[] = [];
       if (photoFiles.length > 0) {
         setUploadingPhotos(true);
         for (const file of photoFiles) {
-          const url = await uploadPhoto(file);
-          if (url) {
-            uploadedPhotoUrls.push(url);
+          try {
+            const url = await photoApi.upload(file);
+            if (url) {
+              uploadedPhotoUrls.push(url);
+            }
+          } catch (photoError) {
+            console.error('Failed to upload photo:', photoError);
           }
         }
         setUploadingPhotos(false);
@@ -97,7 +100,11 @@ const ReviewForm: React.FC<ReviewFormProps> = ({ placeId, onSuccess, onCancel })
       }
     } catch (err: any) {
       console.error('Failed to submit review:', err);
-      setError('Произошла ошибка при отправке отзыва');
+      if (err.response?.data?.detail === 'isNoGoodMessage') {
+        setError('Отзыв содержит недопустимый контент');
+      } else {
+        setError('Произошла ошибка при отправке отзыва');
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -119,7 +126,6 @@ const ReviewForm: React.FC<ReviewFormProps> = ({ placeId, onSuccess, onCancel })
         </div>
       )}
 
-      {/* Rating */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
           Ваша оценка
@@ -144,7 +150,6 @@ const ReviewForm: React.FC<ReviewFormProps> = ({ placeId, onSuccess, onCancel })
         </div>
       </div>
 
-      {/* Review text */}
       <div>
         <label htmlFor="review" className="block text-sm font-medium text-gray-700 mb-2">
           Ваш отзыв
@@ -159,7 +164,6 @@ const ReviewForm: React.FC<ReviewFormProps> = ({ placeId, onSuccess, onCancel })
         />
       </div>
 
-      {/* Photos */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
           Фотографии (необязательно)
@@ -201,7 +205,6 @@ const ReviewForm: React.FC<ReviewFormProps> = ({ placeId, onSuccess, onCancel })
         </label>
       </div>
 
-      {/* Buttons */}
       <div className="flex space-x-3">
         {onCancel && (
           <button

@@ -1,18 +1,16 @@
 import { create } from 'zustand';
 import axios from 'axios';
 
-// API Base URL - use environment variable or default to remote server
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://85.198.80.80:8000/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 60000, // Increase to 60 seconds for large datasets
+  timeout: 60000,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Types based on OpenAPI spec
 export interface Product {
   id?: number | null;
   type?: string | null;
@@ -45,6 +43,7 @@ export interface Review {
   review_photos: string[];
   like?: number | null;
   dislike?: number | null;
+  rating?: number | null;
 }
 
 export interface Place {
@@ -69,6 +68,7 @@ export interface Place {
   equipment: Equipment[];
   ads: Ads[];
   reviews: Review[];
+  photos?: string[];
 }
 
 export interface User {
@@ -97,7 +97,6 @@ export interface PlaceFilters {
 export type ViewMode = 'map' | 'list';
 
 interface AppState {
-  // Places
   places: Place[];
   selectedPlace: Place | null;
   isLoadingPlaces: boolean;
@@ -107,22 +106,18 @@ interface AppState {
   currentPage: number;
   paginationLimit: number;
   
-  // User
   user: User | null;
   isAuthenticated: boolean;
   authError: string | null;
   
-  // Users list (for leaderboard)
   users: User[];
   isLoadingUsers: boolean;
   
-  // UI state
   viewMode: ViewMode;
   filterModalOpen: boolean;
   searchQuery: string;
   filters: PlaceFilters;
   
-  // Actions - Places
   fetchPlaces: (reset?: boolean) => Promise<void>;
   fetchMorePlaces: () => Promise<void>;
   fetchPlacesWithFilters: (filters: PlaceFilters, reset?: boolean) => Promise<void>;
@@ -139,19 +134,18 @@ interface AppState {
     is_health?: boolean;
     is_nosmoking?: boolean;
     is_smoke?: boolean;
+    photos?: string[];
   }) => Promise<number | null>;
   updatePlace: (id: number, data: any) => Promise<boolean>;
   
-  // Actions - Auth
   login: (email: string, password: string) => Promise<boolean>;
   register: (name: string, email: string, password: string) => Promise<boolean>;
   logout: () => void;
+  setUser: (user: User | null) => void;
   
-  // Actions - Users
   fetchUsers: () => Promise<void>;
   fetchUserById: (id: number) => Promise<User | null>;
   
-  // Actions - Reviews
   addReview: (data: {
     message: string;
     user_id: number;
@@ -161,7 +155,6 @@ interface AppState {
   }) => Promise<boolean>;
   setReviewRank: (userId: number, reviewId: number, like?: boolean, dislike?: boolean) => Promise<boolean>;
   
-  // Actions - UI
   setViewMode: (mode: ViewMode) => void;
   setFilterModalOpen: (open: boolean) => void;
   setSearchQuery: (query: string) => void;
@@ -170,7 +163,6 @@ interface AppState {
 }
 
 export const useStore = create<AppState>((set, get) => ({
-  // Initial state
   places: [],
   selectedPlace: null,
   isLoadingPlaces: false,
@@ -187,7 +179,6 @@ export const useStore = create<AppState>((set, get) => ({
   users: [],
   isLoadingUsers: false,
   
-  // UI state
   viewMode: 'map',
   filterModalOpen: false,
   searchQuery: '',
@@ -195,28 +186,23 @@ export const useStore = create<AppState>((set, get) => ({
     max_distance: 5,
     is_moderated: true,
   },
-  
-    // Place actions
+
   fetchPlaces: async (reset = true) => {
-    // Don't fetch if already loading
     if (get().isLoadingPlaces) {
-      console.log('Already loading places, skipping...');
       return;
     }
     
     const limit = get().paginationLimit;
     const page = reset ? 1 : get().currentPage;
-    const offset = limit;
     
     set({ isLoadingPlaces: true, placesError: null, currentPage: page });
     try {
       const params = new URLSearchParams();
       params.append('limit', String(limit));
-      params.append('offset', String(offset));
-      params.append('page', String(reset ? 1 : page));
+      params.append('offset', String(limit));
+      params.append('page', String(page));
       const response = await api.get<Place[]>(`/place/?${params.toString()}`);
       const newPlaces = response.data || [];
-      console.log('Fetched places:', newPlaces.length);
       
       set({ 
         places: reset ? newPlaces : [...get().places, ...newPlaces],
@@ -225,7 +211,6 @@ export const useStore = create<AppState>((set, get) => ({
         currentPage: page
       });
     } catch (error: any) {
-      console.error('Failed to fetch places:', error);
       const currentPlaces = get().places;
       set({ 
         placesError: error.message || 'Failed to fetch places', 
@@ -244,12 +229,11 @@ export const useStore = create<AppState>((set, get) => ({
     set({ isLoadingMorePlaces: true });
     const nextPage = state.currentPage + 1;
     const limit = state.paginationLimit;
-    const offset = limit;
     
     try {
       const params = new URLSearchParams();
       params.append('limit', String(limit));
-      params.append('offset', String(offset));
+      params.append('offset', String(limit));
       params.append('page', String(nextPage));
       const response = await api.get<Place[]>(`/place/?${params.toString()}`);
       const newPlaces = response.data || [];
@@ -261,7 +245,6 @@ export const useStore = create<AppState>((set, get) => ({
         currentPage: nextPage
       });
     } catch (error: any) {
-      console.error('Failed to fetch more places:', error);
       set({ isLoadingMorePlaces: false });
     }
   },
@@ -269,7 +252,6 @@ export const useStore = create<AppState>((set, get) => ({
   fetchPlacesWithFilters: async (filters: PlaceFilters, reset = true) => {
     const limit = get().paginationLimit;
     const page = reset ? 1 : get().currentPage;
-    const offset = limit;
     
     set({ isLoadingPlaces: true, placesError: null, currentPage: page });
     try {
@@ -294,8 +276,8 @@ export const useStore = create<AppState>((set, get) => ({
       }
       
       params.append('limit', String(limit));
-      params.append('offset', String(offset));
-      params.append('page', String(reset ? 1 : page));
+      params.append('offset', String(limit));
+      params.append('page', String(page));
       
       const response = await api.get<Place[]>(`/place/search?${params.toString()}`);
       const newPlaces = response.data || [];
@@ -307,7 +289,6 @@ export const useStore = create<AppState>((set, get) => ({
         currentPage: page
       });
     } catch (error: any) {
-      console.error('Failed to fetch places with filters:', error);
       set({ 
         placesError: error.message || 'Failed to fetch places', 
         isLoadingPlaces: false,
@@ -325,7 +306,6 @@ export const useStore = create<AppState>((set, get) => ({
     set({ isLoadingMorePlaces: true });
     const nextPage = state.currentPage + 1;
     const limit = state.paginationLimit;
-    const offset = limit;
     
     try {
       const params = new URLSearchParams();
@@ -349,7 +329,7 @@ export const useStore = create<AppState>((set, get) => ({
       }
       
       params.append('limit', String(limit));
-      params.append('offset', String(offset));
+      params.append('offset', String(limit));
       params.append('page', String(nextPage));
       
       const response = await api.get<Place[]>(`/place/search?${params.toString()}`);
@@ -362,7 +342,6 @@ export const useStore = create<AppState>((set, get) => ({
         currentPage: nextPage
       });
     } catch (error: any) {
-      console.error('Failed to fetch more places with filters:', error);
       set({ isLoadingMorePlaces: false });
     }
   },
@@ -372,7 +351,6 @@ export const useStore = create<AppState>((set, get) => ({
       const response = await api.get<Place>(`/place/point/${id}`);
       return response.data;
     } catch (error) {
-      console.error('Failed to fetch place:', error);
       return null;
     }
   },
@@ -382,50 +360,68 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   addPlace: async (data) => {
+    const state = get();
+    if (!state.user) {
+      return null;
+    }
     try {
-      const response = await api.post<number>('/place/', data);
+      const placeData = {
+        id_user: state.user.user_id,
+        ...data
+      };
+      const response = await api.post<number>('/place/', placeData);
       await get().fetchPlaces();
       return response.data;
     } catch (error) {
-      console.error('Failed to add place:', error);
       return null;
     }
   },
   
   updatePlace: async (id: number, data: any) => {
+    const state = get();
+    if (!state.user) {
+      return false;
+    }
     try {
-      await api.post(`/place/change/${id}`, data);
+      const placeData = {
+        id_user: state.user.user_id,
+        ...data
+      };
+      await api.post(`/place/change/${id}`, placeData);
       await get().fetchPlaces();
       return true;
     } catch (error) {
-      console.error('Failed to update place:', error);
       return false;
     }
   },
   
-  // Auth actions
   login: async (email: string, password: string) => {
     set({ authError: null });
     try {
-      const response = await api.post<{ user_id: number; name?: string; email?: string; rating?: number }>('/user/login', {
+      const response = await api.post<{ user_id: number }>('/user/login', {
         email,
         password,
       });
       
-      console.log('Login response:', response.data);
+      const userId = response.data.user_id;
+      if (!userId) {
+        set({ authError: 'Неверный email или пароль' });
+        return false;
+      }
       
-      const userData: User = {
-        user_id: response.data.user_id,
-        name: response.data.name,
-        email: response.data.email,
-        rating: response.data.rating,
-      };
+      try {
+        const userResponse = await api.get<User>(`/user/${userId}`);
+        const userData = userResponse.data;
+        set({ user: userData, isAuthenticated: true });
+        localStorage.setItem('user', JSON.stringify(userData));
+      } catch {
+        const userData: User = { user_id: userId, email };
+        set({ user: userData, isAuthenticated: true });
+        localStorage.setItem('user', JSON.stringify(userData));
+      }
       
-      set({ user: userData, isAuthenticated: true });
-      localStorage.setItem('user', JSON.stringify(userData));
       return true;
     } catch (error: any) {
-      console.error('Login error:', error);
       const errorMsg = error.response?.data?.detail || 'Неверный email или пароль';
       set({ authError: errorMsg });
       return false;
@@ -441,10 +437,14 @@ export const useStore = create<AppState>((set, get) => ({
         password,
       });
       
-      console.log('Register response:', response.data);
+      const userId = response.data.user_id;
+      if (!userId) {
+        set({ authError: 'Ошибка регистрации' });
+        return false;
+      }
       
       const userData: User = {
-        user_id: response.data.user_id,
+        user_id: userId,
         name,
         email,
       };
@@ -453,7 +453,6 @@ export const useStore = create<AppState>((set, get) => ({
       localStorage.setItem('user', JSON.stringify(userData));
       return true;
     } catch (error: any) {
-      console.error('Register error:', error);
       const errorMsg = error.response?.data?.detail || 'Ошибка регистрации';
       set({ authError: errorMsg });
       return false;
@@ -463,17 +462,26 @@ export const useStore = create<AppState>((set, get) => ({
   logout: () => {
     set({ user: null, isAuthenticated: false });
     localStorage.removeItem('user');
+    localStorage.removeItem('userId');
+  },
+
+  setUser: (user: User | null) => {
+    set({ user, isAuthenticated: !!user });
+    if (user) {
+      localStorage.setItem('user', JSON.stringify(user));
+      localStorage.setItem('userId', String(user.user_id));
+    } else {
+      localStorage.removeItem('user');
+      localStorage.removeItem('userId');
+    }
   },
   
-  // User actions
   fetchUsers: async () => {
     set({ isLoadingUsers: true });
     try {
       const response = await api.get<User[]>('/user/');
-      console.log('Fetched users:', response.data);
       set({ users: response.data || [], isLoadingUsers: false });
     } catch (error) {
-      console.error('Failed to fetch users:', error);
       set({ isLoadingUsers: false, users: [] });
     }
   },
@@ -483,19 +491,22 @@ export const useStore = create<AppState>((set, get) => ({
       const response = await api.get<User>(`/user/${id}`);
       return response.data;
     } catch (error) {
-      console.error('Failed to fetch user:', error);
       return null;
     }
   },
   
-  // Review actions
   addReview: async (data) => {
     try {
       await api.post('/user/review', data);
-      await get().fetchPlaces();
+      const selectedPlace = get().selectedPlace;
+      if (selectedPlace?.id) {
+        const updatedPlace = await get().fetchPlaceById(selectedPlace.id);
+        if (updatedPlace) {
+          set({ selectedPlace: updatedPlace });
+        }
+      }
       return true;
     } catch (error) {
-      console.error('Failed to add review:', error);
       return false;
     }
   },
@@ -510,12 +521,10 @@ export const useStore = create<AppState>((set, get) => ({
       });
       return true;
     } catch (error) {
-      console.error('Failed to set review rank:', error);
       return false;
     }
   },
   
-  // UI actions
   setViewMode: (mode: ViewMode) => {
     set({ viewMode: mode });
   },
@@ -542,32 +551,31 @@ export const useStore = create<AppState>((set, get) => ({
   },
 }));
 
-// Photo upload function (separate from store due to FormData)
 export const uploadPhoto = async (file: File): Promise<string | null> => {
   try {
-    const formData = new FormData();
-    formData.append('file', file);
+    const contentType = file.type || 'image/jpeg';
+    const arrayBuffer = await file.arrayBuffer();
+    const uint8Array = new Uint8Array(arrayBuffer);
     
     const response = await fetch(`${API_BASE_URL}/photo/upload`, {
       method: 'POST',
-      body: formData,
+      headers: {
+        'Content-Type': contentType,
+      },
+      body: uint8Array,
     });
     
     if (!response.ok) {
-      const errorData = await response.text();
-      console.error('Photo upload failed:', response.status, errorData);
       throw new Error(`Upload failed: ${response.status}`);
     }
     
     const data = await response.json();
-    return data.url || data;
+    return data.url || null;
   } catch (error) {
-    console.error('Failed to upload photo:', error);
     return null;
   }
 };
 
-// Initialize user from localStorage
 const savedUser = localStorage.getItem('user');
 if (savedUser) {
   try {

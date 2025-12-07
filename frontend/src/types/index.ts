@@ -1,4 +1,3 @@
-// Product data
 export interface ProductData {
   id?: number;
   type?: string;
@@ -9,14 +8,12 @@ export interface ProductData {
   is_smoking?: boolean;
 }
 
-// Equipment data
 export interface EquipmentData {
   name?: string;
   count?: number;
   type?: number;
 }
 
-// Ads data
 export interface AdsData {
   id?: number;
   type?: string;
@@ -24,19 +21,18 @@ export interface AdsData {
   is_health?: boolean;
 }
 
-// Review with photos, likes, dislikes
 export interface ReviewData {
   id?: number;
   id_user?: number;
   user_name?: string;
   id_place?: number;
   text?: string;
+  rating?: number;
   review_photos: string[];
   like: number;
   dislike: number;
 }
 
-// Place with dual ratings
 export interface Place {
   id?: number;
   name?: string;
@@ -50,8 +46,8 @@ export interface Place {
   is_insurance?: boolean;
   is_nosmoking?: boolean;
   is_smoke?: boolean;
-  rating?: number; // Health rating (0-100)
-  review_rank?: number; // User review rating (1-5 average)
+  rating?: number;
+  review_rank?: number;
   sport_type?: string;
   distance_to_center?: number;
   is_moderated?: boolean;
@@ -61,7 +57,6 @@ export interface Place {
   reviews: ReviewData[];
 }
 
-// Place create/update data
 export interface PlaceCreateData {
   name?: string;
   info?: string;
@@ -81,7 +76,6 @@ export interface PlaceCreateData {
   ads?: AdsData[];
 }
 
-// User
 export interface User {
   user_id: number;
   name?: string;
@@ -91,7 +85,6 @@ export interface User {
   rating?: number;
 }
 
-// Auth
 export interface UserCreateData {
   name: string;
   email: string;
@@ -103,16 +96,14 @@ export interface UserLoginData {
   password: string;
 }
 
-// Review create (updated with rating and photos)
 export interface UserReviewData {
   message: string;
   user_id: number;
   place_id: number;
-  rating: number; // 1-5
+  rating: number;
   photos?: string[];
 }
 
-// Review rank (like/dislike)
 export interface ReviewRankData {
   user_id: number;
   review_id: number;
@@ -120,7 +111,6 @@ export interface ReviewRankData {
   dislike?: boolean;
 }
 
-// Place types
 export interface PlaceTypes {
   place_type: { id: number; type: string }[];
   product_type: { id: number; type: string }[];
@@ -129,7 +119,6 @@ export interface PlaceTypes {
   sport_type: { id: number; type: string }[];
 }
 
-// Search filters
 export interface SearchFilters {
   place_type?: number;
   is_alcohol?: boolean;
@@ -140,7 +129,17 @@ export interface SearchFilters {
   is_moderated?: boolean;
 }
 
-// Admin types
+export interface UserPreferences {
+  placeTypes: number[];
+  characteristics: {
+    is_health?: boolean;
+    is_nosmoking?: boolean;
+    is_alcohol?: boolean;
+    is_smoke?: boolean;
+  };
+  maxDistance: number;
+}
+
 export interface AdminCreateData {
   id_invite: number;
   name: string;
@@ -169,3 +168,4 @@ export interface AdminDeleteReviewData {
 }
 
 export type ViewMode = 'map' | 'list';
+export type AppPage = 'home' | 'map' | 'leaderboard' | 'community' | 'profile' | 'chat' | 'user-profile';

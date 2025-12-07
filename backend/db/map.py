@@ -1,15 +1,10 @@
-import hashlib
-import pprint
-import time
-from datetime import datetime, timedelta
+import logging
 from typing import Optional, List
 
 import psycopg2
 from psycopg2 import sql
-import logging
 
-import config as config
-from db.migration import db_connection, db_config
+from db.migration import db_connection
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(
@@ -22,20 +17,30 @@ logging.basicConfig(
 )
 
 
-async def get_all_places() -> list:
+async def get_all_places(limit: Optional[int] = None, offset: Optional[int] = None, page: Optional[int] = None) -> list:
     connection = db_connection()
     cursor = connection.cursor()
 
     try:
-        query = sql.SQL("""
+        base_query = """
 SELECT p.id, p.name, p.coord1, p.coord2, pt.type, ft.type,
     p.isalcohol, p.ishealth, p.isinsurence, p.isnosmoking, p.issmoke, p.rating, st.type, p.info
 FROM places p
 LEFT JOIN places_type pt ON p.type = pt.id
 LEFT JOIN food_type ft ON p.foodtype = ft.id
-LEFT JOIN sport_type st ON st.id = p.sporttype; 
-        """)
-        cursor.execute(query)
+LEFT JOIN sport_type st ON st.id = p.sporttype
+        """
+
+        if limit is not None:
+            if offset is not None and page is not None:
+                calculated_offset = offset
+                base_query += f" LIMIT {limit} OFFSET {calculated_offset}"
+            elif offset is not None:
+                base_query += f" LIMIT {limit} OFFSET {offset}"
+            else:
+                base_query += f" LIMIT {limit}"
+
+        cursor.execute(base_query)
 
         rows = cursor.fetchall()
         places = []
@@ -89,7 +94,6 @@ LEFT JOIN sport_type st ON st.id = p.sporttype;
             reviews = []
             for row_r in rows_review:
                 review_id = row_r[0]
-                # Получаем фото для этого отзыва
                 query_photos = sql.SQL("""
                     SELECT url FROM reviews_photo WHERE review_id = %s
                 """)
@@ -97,7 +101,6 @@ LEFT JOIN sport_type st ON st.id = p.sporttype;
                 rows_photos = cursor.fetchall()
                 review_photos = [row_photo[0] for row_photo in rows_photos]
 
-                # Получаем количество лайков и дизлайков
                 query_ranks = sql.SQL("""
                     SELECT 
                         COUNT(*) FILTER (WHERE "like" = true) as like_count,
@@ -137,7 +140,6 @@ LEFT JOIN sport_type st ON st.id = p.sporttype;
                 }
                 sports.append(sport)
 
-            # Получаем средний рейтинг отзывов для этого места
             query_review_rank = sql.SQL("""
                 SELECT COALESCE(AVG(rating)::numeric(10,2), 0)
                 FROM reviews 
@@ -147,7 +149,6 @@ LEFT JOIN sport_type st ON st.id = p.sporttype;
             review_rank_row = cursor.fetchone()
             review_rank = float(review_rank_row[0]) if review_rank_row[0] is not None else 0.0
 
-            # Получаем фотографии для этого места
             query_photos = sql.SQL("""
                 SELECT url FROM places_photos WHERE place_id = %s
             """)
@@ -240,7 +241,6 @@ LEFT JOIN sport_type st ON st.id = p.sporttype WHERE p.id = %s;
         reviews = []
         for row_r in rows_review:
             review_id = row_r[0]
-            # Получаем фото для этого отзыва
             query_photos = sql.SQL("""
                 SELECT url FROM reviews_photo WHERE review_id = %s
             """)
@@ -248,7 +248,6 @@ LEFT JOIN sport_type st ON st.id = p.sporttype WHERE p.id = %s;
             rows_photos = cursor.fetchall()
             review_photos = [row_photo[0] for row_photo in rows_photos]
 
-            # Получаем количество лайков и дизлайков
             query_ranks = sql.SQL("""
                 SELECT 
                     COUNT(*) FILTER (WHERE "like" = true) as like_count,
@@ -289,7 +288,6 @@ LEFT JOIN sport_type st ON st.id = p.sporttype WHERE p.id = %s;
             }
             sports.append(sport)
 
-        # Получаем средний рейтинг отзывов для этого места
         query_review_rank = sql.SQL("""
             SELECT COALESCE(AVG(rating)::numeric(10,2), 0)
             FROM reviews 
@@ -299,7 +297,6 @@ LEFT JOIN sport_type st ON st.id = p.sporttype WHERE p.id = %s;
         review_rank_row = cursor.fetchone()
         review_rank = float(review_rank_row[0]) if review_rank_row[0] is not None else 0.0
 
-        # Получаем фотографии для этого места
         query_photos = sql.SQL("""
             SELECT url FROM places_photos WHERE place_id = %s
         """)
@@ -428,7 +425,6 @@ rating, sporttype)
 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
 returning id; 
         """)
-        # rating будет вычислен автоматически после добавления всех данных
         cursor.execute(query, (place['name'], place['info'], place['coord1'], place['coord2'],
                                place['type'], place['food_type'],
                                place['is_alcohol'], place['is_health'], place['is_insurance'],
@@ -460,7 +456,6 @@ returning id;
             for sport in place['equipment']:
                 cursor.execute(query_sport, (id, sport['type'], sport['count']))
 
-        # Сохраняем фотографии если они предоставлены
         if place.get('photos'):
             query_photo = sql.SQL("""
                 INSERT INTO places_photos (place_id, url) VALUES (%s, %s)
@@ -470,7 +465,6 @@ returning id;
 
         cursor.connection.commit()
 
-        # Автоматически пересчитываем рейтинг после создания места
         new_rating = await calculate_health_rating(id)
         update_rating_query = sql.SQL("UPDATE places SET rating = %s WHERE id = %s")
         cursor.execute(update_rating_query, (new_rating, id))
@@ -488,14 +482,10 @@ returning id;
 
 
 async def calculate_health_rating(place_id: int) -> int:
-    """
-    Вычисляет рейтинг здорового места (0-100) на основе различных критериев
-    """
     connection = db_connection()
     cursor = connection.cursor()
 
     try:
-        # Получаем основные флаги места
         query = sql.SQL("""
             SELECT ishealth, isnosmoking, issmoke, isalcohol, isinsurence
             FROM places WHERE id = %s
@@ -507,10 +497,8 @@ async def calculate_health_rating(place_id: int) -> int:
             return 0
 
         ishealth, isnosmoking, issmoke, isalcohol, isinsurence = row
-        # Базовый рейтинг для всех мест
         rating_score = 30
 
-        # Базовые критерии места
         if ishealth:
             rating_score += 25
 
@@ -530,7 +518,6 @@ async def calculate_health_rating(place_id: int) -> int:
         if isinsurence:
             rating_score += 15
 
-        # Проверяем наличие здоровых продуктов
         query_products = sql.SQL("""
             SELECT EXISTS(SELECT 1 FROM product WHERE id_place = %s AND ishealth = true)
         """)
@@ -539,7 +526,6 @@ async def calculate_health_rating(place_id: int) -> int:
         if has_health_products:
             rating_score += 20
 
-        # Проверяем наличие оборудования
         query_equipment = sql.SQL("""
             SELECT EXISTS(SELECT 1 FROM sport_interfaces_place WHERE id_place = %s)
         """)
@@ -548,7 +534,6 @@ async def calculate_health_rating(place_id: int) -> int:
         if has_equipment:
             rating_score += 15
 
-        # Проверяем наличие здоровой рекламы
         query_ads = sql.SQL("""
             SELECT EXISTS(SELECT 1 FROM reklama WHERE id_place = %s AND ishelth = true)
         """)
@@ -557,7 +542,6 @@ async def calculate_health_rating(place_id: int) -> int:
         if has_health_ads:
             rating_score += 15
 
-        # Ограничиваем диапазон от 0 до 100
         rating_score = max(0, min(100, rating_score))
 
         return rating_score
@@ -572,9 +556,6 @@ async def calculate_health_rating(place_id: int) -> int:
 
 
 async def update_place(place_id: int, place_data: dict) -> bool:
-    """
-    Обновляет информацию о месте и автоматически пересчитывает рейтинг
-    """
     connection = db_connection()
     cursor = connection.cursor()
 
@@ -592,13 +573,11 @@ async def update_place(place_id: int, place_data: dict) -> bool:
                                        SET rating = %s
                                        WHERE id = %s"""
             cursor.execute(add_rating, (row[1] + add_rating_cnt, place_data['id_user']))
-        # Проверяем существование места
         check_query = sql.SQL("SELECT id FROM places WHERE id = %s")
         cursor.execute(check_query, (place_id,))
         if not cursor.fetchone():
             return False
 
-        # Строим UPDATE запрос динамически
         update_fields = []
         update_values = []
 
@@ -627,13 +606,11 @@ async def update_place(place_id: int, place_data: dict) -> bool:
             update_fields.append("sporttype = %s")
             update_values.append(place_data['sport_type'])
 
-        # Обновляем основные поля места
         if update_fields:
             update_query = "UPDATE places SET " + ", ".join(update_fields) + " WHERE id = %s"
             update_values.append(place_id)
             cursor.execute(update_query, tuple(update_values))
 
-        # Добавляем новые продукты если предоставлены
         if 'products' in place_data and place_data['products']:
             query_product = sql.SQL("""
                 INSERT INTO product (type, min_cost, ishealth, isalcohol, issmoking, name, id_place) 
@@ -644,7 +621,6 @@ async def update_place(place_id: int, place_data: dict) -> bool:
                                (product.get('type'), product.get('min_cost'), product.get('is_health'),
                                 product.get('is_alcohol'), product.get('is_smoking'), product.get('name'), place_id))
 
-        # Добавляем новую рекламу если предоставлена
         if 'ads' in place_data and place_data['ads']:
             query_ads = sql.SQL("""
                 INSERT INTO reklama (id_place, type, name, ishelth) VALUES (%s, %s, %s, %s);
@@ -652,7 +628,6 @@ async def update_place(place_id: int, place_data: dict) -> bool:
             for ad in place_data['ads']:
                 cursor.execute(query_ads, (place_id, ad.get('type'), ad.get('name'), ad.get('is_health')))
 
-        # Добавляем новое оборудование если предоставлено
         if 'equipment' in place_data and place_data['equipment']:
             query_sport = sql.SQL("""
                 INSERT INTO sport_interfaces_place (id_place, id_interface, count) VALUES (%s, %s, %s)
@@ -660,13 +635,10 @@ async def update_place(place_id: int, place_data: dict) -> bool:
             for sport in place_data['equipment']:
                 cursor.execute(query_sport, (place_id, sport.get('type'), sport.get('count')))
 
-        # Обновляем фотографии если они предоставлены (удаляем старые и добавляем новые)
         if 'photos' in place_data and place_data['photos'] is not None:
-            # Удаляем все существующие фотографии для этого места
             query_delete_photos = sql.SQL("DELETE FROM places_photos WHERE place_id = %s")
             cursor.execute(query_delete_photos, (place_id,))
 
-            # Добавляем новые фотографии
             query_photo = sql.SQL("""
                 INSERT INTO places_photos (place_id, url) VALUES (%s, %s)
             """)
@@ -675,7 +647,6 @@ async def update_place(place_id: int, place_data: dict) -> bool:
 
         cursor.connection.commit()
 
-        # Автоматически пересчитываем рейтинг после обновления
         new_rating = await calculate_health_rating(place_id)
         update_rating_query = sql.SQL("UPDATE places SET rating = %s WHERE id = %s")
         cursor.execute(update_rating_query, (new_rating, place_id))
@@ -707,26 +678,15 @@ async def search_places(
         has_ads_type: Optional[List[int]] = None,
         need_products: Optional[bool] = None,
         need_equipment: Optional[bool] = None,
-        need_ads: Optional[bool] = None
+        need_ads: Optional[bool] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+        page: Optional[int] = None
 ) -> list:
-    """
-    Поиск мест по фильтрам:
-    - place_type: тип места (ID)
-    - is_alcohol, is_health, is_nosmoking, is_smoke: флаги
-    - max_distance: максимальное расстояние до центра Тулы (км)
-    - is_moderated: флаг модерации
-    - has_product_type: список ID типов продуктов
-    - has_equipment_type: список ID типов оборудования
-    - has_ads_type: список ID типов рекламы
-    - need_products: загружать ли данные о продуктах
-    - need_equipment: загружать ли данные об оборудовании
-    - need_ads: загружать ли данные о рекламе
-    """
     connection = db_connection()
     cursor = connection.cursor()
 
     try:
-        # Базовый запрос
         base_query = """
 SELECT p.id, p.name, p.coord1, p.coord2, pt.type, ft.type,
     p.isalcohol, p.ishealth, p.isinsurence, p.isnosmoking, p.issmoke, p.rating, st.type, p.info,
@@ -738,7 +698,6 @@ LEFT JOIN sport_type st ON st.id = p.sporttype
 WHERE p.coord1 IS NOT NULL AND p.coord2 IS NOT NULL
         """
 
-        # Строим условия WHERE
         conditions = []
         params = []
 
@@ -770,7 +729,6 @@ WHERE p.coord1 IS NOT NULL AND p.coord2 IS NOT NULL
             conditions.append("p.is_moderated = %s")
             params.append(is_moderated)
 
-        # Фильтры по типам списков (поддержка множественного выбора)
         if has_product_type is not None and len(has_product_type) > 0:
             placeholders = ','.join(['%s'] * len(has_product_type))
             conditions.append(
@@ -789,7 +747,6 @@ WHERE p.coord1 IS NOT NULL AND p.coord2 IS NOT NULL
                 f"EXISTS (SELECT 1 FROM reklama WHERE reklama.id_place = p.id AND reklama.type IN ({placeholders}))")
             params.extend(has_ads_type)
 
-        # Фильтры по наличию списков
         if need_products is not None:
             if need_products:
                 conditions.append("EXISTS (SELECT 1 FROM product WHERE product.id_place = p.id)")
@@ -810,19 +767,27 @@ WHERE p.coord1 IS NOT NULL AND p.coord2 IS NOT NULL
             else:
                 conditions.append("NOT EXISTS (SELECT 1 FROM reklama WHERE reklama.id_place = p.id)")
 
-        # Добавляем условия к запросу
         if conditions:
             base_query += " AND " + " AND ".join(conditions)
 
-        query = sql.SQL(base_query)
-        cursor.execute(query, tuple(params))
+        if limit is not None:
+            if offset is not None and page is not None:
+                calculated_offset = offset
+                base_query += f" LIMIT {limit} OFFSET {calculated_offset}"
+            elif offset is not None:
+                base_query += f" LIMIT {limit} OFFSET {offset}"
+            else:
+                base_query += f" LIMIT {limit}"
+
+        logger.debug(f"Executing query: {base_query[:200]}... with params: {params}")
+        cursor.execute(base_query, tuple(params))
 
         rows = cursor.fetchall()
+        logger.debug(f"Found {len(rows)} rows")
         places = []
         for row in rows:
             id = row[0]
 
-            # Получаем продукты только если нужно
             products = []
             if need_products is True:
                 query_product = sql.SQL("""
@@ -844,7 +809,6 @@ WHERE p.coord1 IS NOT NULL AND p.coord2 IS NOT NULL
                     }
                     products.append(product)
 
-            # Получаем рекламу только если нужно
             ads = []
             if need_ads is True:
                 query_ads = sql.SQL("""
@@ -863,7 +827,6 @@ WHERE p.coord1 IS NOT NULL AND p.coord2 IS NOT NULL
                     }
                     ads.append(ad)
 
-            # Получаем отзывы (всегда загружаем)
             query_review = sql.SQL(
                 """SELECT id, iduser, (SELECT users.name from users where users.id = reviews.iduser), idplace, text 
                 from reviews where idplace=%s"""
@@ -873,7 +836,6 @@ WHERE p.coord1 IS NOT NULL AND p.coord2 IS NOT NULL
             reviews = []
             for row_r in rows_review:
                 review_id = row_r[0]
-                # Получаем фото для этого отзыва
                 query_photos = sql.SQL("""
                     SELECT url FROM reviews_photo WHERE review_id = %s
                 """)
@@ -881,7 +843,6 @@ WHERE p.coord1 IS NOT NULL AND p.coord2 IS NOT NULL
                 rows_photos = cursor.fetchall()
                 review_photos = [row_photo[0] for row_photo in rows_photos]
 
-                # Получаем количество лайков и дизлайков
                 query_ranks = sql.SQL("""
                     SELECT 
                         COUNT(*) FILTER (WHERE "like" = true) as like_count,
@@ -906,7 +867,6 @@ WHERE p.coord1 IS NOT NULL AND p.coord2 IS NOT NULL
                 }
                 reviews.append(review)
 
-            # Получаем оборудование только если нужно
             sports = []
             if need_equipment is True:
                 query_sport = sql.SQL(
@@ -922,7 +882,6 @@ WHERE p.coord1 IS NOT NULL AND p.coord2 IS NOT NULL
                     }
                     sports.append(sport)
 
-            # Получаем средний рейтинг отзывов для этого места
             query_review_rank = sql.SQL("""
                 SELECT COALESCE(AVG(rating)::numeric(10,2), 0)
                 FROM reviews 
@@ -932,7 +891,6 @@ WHERE p.coord1 IS NOT NULL AND p.coord2 IS NOT NULL
             review_rank_row = cursor.fetchone()
             review_rank = float(review_rank_row[0]) if review_rank_row[0] is not None else 0.0
 
-            # Получаем фотографии для этого места
             query_photos = sql.SQL("""
                 SELECT url FROM places_photos WHERE place_id = %s
             """)
@@ -947,7 +905,6 @@ WHERE p.coord1 IS NOT NULL AND p.coord2 IS NOT NULL
                      "distance_to_center": row[14], "is_moderated": row[15],
                      "reviews": reviews, "review_rank": review_rank, "photos": photos}
 
-            # Добавляем поля только если они загружены
             if need_products is True:
                 place["products"] = products
             if need_ads is True:

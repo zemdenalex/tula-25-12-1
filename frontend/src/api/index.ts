@@ -6,8 +6,7 @@ import type {
   AdminVerifyPlaceData, AdminDeleteReviewData
 } from '../types';
 
-// Use proxy in dev, direct URL in production
-const API_BASE = import.meta.env.DEV ? '/api' : 'http://85.198.80.80:8000/api';
+export const API_BASE = import.meta.env.DEV ? '/api' : 'http://85.198.80.80:8000/api';
 
 const api = axios.create({
   baseURL: API_BASE,
@@ -17,36 +16,47 @@ const api = axios.create({
   timeout: 10000,
 });
 
-// Handle 418 "I'm a teapot" as empty data (backend returns this when no data)
 const handleResponse = <T>(promise: Promise<{ data: T }>): Promise<T> => {
   return promise
     .then(res => res.data)
     .catch((error: AxiosError) => {
       if (error.response?.status === 418) {
-        // Backend returns 418 when no data - treat as empty
         return [] as unknown as T;
       }
       throw error;
     });
 };
 
-// Places API
+export interface PaginationParams {
+  limit?: number;
+  offset?: number;
+  page?: number;
+}
+
 export const placesApi = {
-  getAll: (): Promise<Place[]> => {
-    return handleResponse(api.get<Place[]>('/place/'));
+  getAll: (pagination?: PaginationParams): Promise<Place[]> => {
+    const params = new URLSearchParams();
+    if (pagination?.limit !== undefined) params.append('limit', String(pagination.limit));
+    if (pagination?.offset !== undefined) params.append('offset', String(pagination.offset));
+    if (pagination?.page !== undefined) params.append('page', String(pagination.page));
+    const queryString = params.toString();
+    return handleResponse(api.get<Place[]>(`/place/${queryString ? `?${queryString}` : ''}`));
   },
 
   getById: (id: number): Promise<Place> => {
     return handleResponse(api.get<Place>(`/place/point/${id}`));
   },
 
-  search: (filters: SearchFilters): Promise<Place[]> => {
+  search: (filters: SearchFilters, pagination?: PaginationParams): Promise<Place[]> => {
     const params = new URLSearchParams();
     Object.entries(filters).forEach(([key, value]) => {
       if (value !== undefined && value !== null) {
         params.append(key, String(value));
       }
     });
+    if (pagination?.limit !== undefined) params.append('limit', String(pagination.limit));
+    if (pagination?.offset !== undefined) params.append('offset', String(pagination.offset));
+    if (pagination?.page !== undefined) params.append('page', String(pagination.page));
     return handleResponse(api.get<Place[]>(`/place/search?${params.toString()}`));
   },
 
@@ -63,7 +73,6 @@ export const placesApi = {
   },
 };
 
-// Users API
 export const usersApi = {
   create: (userData: UserCreateData): Promise<{ user_id: number }> => {
     return handleResponse(api.post<{ user_id: number }>('/user/create', userData));
@@ -77,12 +86,16 @@ export const usersApi = {
     return handleResponse(api.get<User>(`/user/${id}`));
   },
 
-  getAll: (): Promise<User[]> => {
-    return handleResponse(api.get<User[]>('/user/'));
+  getAll: (pagination?: PaginationParams): Promise<User[]> => {
+    const params = new URLSearchParams();
+    if (pagination?.limit !== undefined) params.append('limit', String(pagination.limit));
+    if (pagination?.offset !== undefined) params.append('offset', String(pagination.offset));
+    if (pagination?.page !== undefined) params.append('page', String(pagination.page));
+    const queryString = params.toString();
+    return handleResponse(api.get<User[]>(`/user/${queryString ? `?${queryString}` : ''}`));
   },
 };
 
-// Reviews API
 export const reviewsApi = {
   add: (review: UserReviewData): Promise<void> => {
     return handleResponse(api.post('/user/review', review));
@@ -99,20 +112,33 @@ export const reviewsApi = {
   },
 };
 
-// Photo API
 export const photoApi = {
   upload: async (file: File): Promise<string> => {
+    const contentType = file.type || 'image/jpeg';
+    
     const arrayBuffer = await file.arrayBuffer();
-    const response = await api.post<{ url: string }>('/photo/upload', arrayBuffer, {
+    const uint8Array = new Uint8Array(arrayBuffer);
+    
+    const response = await fetch(`${API_BASE}/photo/upload`, {
+      method: 'POST',
       headers: {
-        'Content-Type': file.type || 'image/jpeg',
+        'Content-Type': contentType,
+        'Content-Length': String(uint8Array.length),
       },
+      body: uint8Array,
     });
-    return response.data.url;
+    
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '');
+      console.error('Photo upload failed:', response.status, errorText);
+      throw new Error(`Upload failed: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    return data.url;
   },
 };
 
-// Admin API
 export const adminApi = {
   create: (data: AdminCreateData): Promise<{ id: number }> => {
     return handleResponse(api.post<{ id: number }>('/admin/create', data));

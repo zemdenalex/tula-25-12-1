@@ -8,21 +8,21 @@ export default {
     extend: {
       colors: {
         primary: {
-          50: '#eff6ff',
-          100: '#dbeafe',
-          200: '#bfdbfe',
-          300: '#93c5fd',
-          400: '#60a5fa',
-          500: '#3b82f6',
-          600: '#2563eb',
-          700: '#1d4ed8',
-          800: '#1e40af',
-          900: '#1e3a8a',
+          50: '#EEF2FF',
+          100: '#E0E7FF',
+          200: '#C7D2FE',
+          300: '#A5B4FC',
+          400: '#818CF8',
+          500: '#4A6CF7',
+          600: '#3B5AE8',
+          700: '#2D4AD9',
+          800: '#1E3A8A',
+          900: '#1E3A8A',
         },
       },
-      boxShadow: {
-        'up': '0 -4px 6px -1px rgb(0 0 0 / 0.1)',
-      }
+      fontFamily: {
+        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+      },
     },
   },
   plugins: [],

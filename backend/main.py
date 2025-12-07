@@ -21,7 +21,6 @@ async def main():
 
 if __name__ == '__main__':
     db.migration.migration_up()
-    # Инициализируем MinIO bucket при старте
     try:
         ensure_bucket_exists()
     except Exception as e:

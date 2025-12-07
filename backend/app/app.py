@@ -1,43 +1,41 @@
+import base64
 import json
-import time
 import logging
-from datetime import datetime, timedelta
+import mimetypes
+from typing import Optional, List
 
-from fastapi import FastAPI, HTTPException, APIRouter, Request, Response, Query, File, UploadFile, Request
+import requests
+from fastapi import FastAPI, HTTPException, APIRouter, Response, Query, Request
 from fastapi import Request as FastAPIRequest
+from openai import OpenAI
+from pydantic import BaseModel
 from starlette.middleware.cors import CORSMiddleware as cors
 
-import os
-
-from db.map import get_all_places, add_place, get_all_types, get_place, search_places, update_place
-from db.map import get_all_places, add_place, get_all_types, get_place
-from db.user import create_user, login_user, add_review, get_all_users, get_user_by_id, delete_review, set_review_rank, update_user
-from db.user import create_user, login_user, add_review, get_all_users, get_user_by_id, delete_review, set_review_rank, add_follow, get_followed_reviews
-from s3_client import upload_photo
-from db.map import get_all_places, add_place, get_all_types, get_place
-from db.user import create_user, login_user, add_review, get_all_users, get_user_by_id, delete_review, get_leaderboard
+import config
 from db.admin import create_admin, login_admin, update_user_rating, verify_place, ban_user, delete_review_admin
-
-
-from typing import Dict, Any, Optional, List
-from pydantic import BaseModel
+from db.map import get_all_places, add_place, get_all_types, get_place
+from db.map import search_places, update_place
+from db.user import create_user, login_user, add_review, get_all_users, get_user_by_id, delete_review, get_leaderboard
+from db.user import set_review_rank, add_follow, get_followed_reviews, update_user
+from s3_client import upload_photo
 
 logger = logging.getLogger(__name__)
 
 app = FastAPI(root_path="/api")
 
 origins = [
-    "http://localhost.tiangolo.com",
-    "https://localhost.tiangolo.com",
-    "http://localhost",
-    "http://localhost:8080",
-    "http://localhost:80",
-    "http://localhost:443",
-    "http://localhost:5173",
-    "http://localhost:5174",
-    "http://localhost:4173",
-    "http://localhost:3000",
-    "https://localhost:8000",
+    "*",
+#     "http://localhost.tiangolo.com",
+#     "https://localhost.tiangolo.com",
+#     "http://localhost",
+#     "http://localhost:8080",
+#     "http://localhost:80",
+#     "http://localhost:443",
+#     "http://localhost:5173",
+#     "http://localhost:5174",
+#     "http://localhost:4173",
+#     "http://localhost:3000",
+#     "https://localhost:8000",
 ]
 
 app.add_middleware(
@@ -48,10 +46,50 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+OPENROUTER_API_KEY = config.OPENROUTER_API_KEY
+
+client = OpenAI(
+    base_url="https://openrouter.ai/api/v1",
+    api_key=OPENROUTER_API_KEY,
+)
+
+
+def classify_toxic_review(text: str) -> int:
+    if not text or not text.strip():
+        return 0
+
+    system_prompt = (
+        "Ты классификатор токсичных сообщений.\n"
+        "Определи, является ли текст токсичным.\n\n"
+        "Токсичный текст — это оскорбления, угрозы, грубый мат, унижение личности "
+        "или групп людей, явная агрессия и ненависть.\n\n"
+        "Если текст токсичный — ответь числом 1.\n"
+        "Если текст НЕ токсичный — ответь числом 0.\n"
+        "Ответь ТОЛЬКО одной цифрой 0 или 1, без комментариев."
+    )
+
+    user_prompt = f'Текст отзыва: """{text}"""'
+
+    completion = client.chat.completions.create(
+        model="openai/gpt-4.1-nano",
+        temperature=0,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+    )
+
+    content = (completion.choices[0].message.content or "").strip()
+
+    if content.startswith("1"):
+        return 1
+    if content.startswith("0"):
+        return 0
+    return 0
+
 
 @app.options("/{path:path}")
 async def options_route(path: str, request: Request):
-    """Обработка OPTIONS запросов для CORS"""
     return Response(status_code=204)
 
 
@@ -71,7 +109,7 @@ class productData(BaseModel):
 class equipmentData(BaseModel):
     name: Optional[str] = None
     count: Optional[int] = None
-    type: Optional[int] = None  # ID интерфейса для создания/обновления
+    type: Optional[int] = None
 
 
 class adsData(BaseModel):
@@ -140,12 +178,15 @@ class placeResponseData(BaseModel):
 
 
 @place_router.get("/", response_model=List[placeResponseData])
-async def get_all_points_h():
-    all_points = await get_all_places()
+async def get_all_points_h(
+        limit: Optional[int] = Query(None),
+        offset: Optional[int] = Query(None),
+        page: Optional[int] = Query(None)
+):
+    all_points = await get_all_places(limit=limit, offset=offset, page=page)
     if not all_points:
         raise HTTPException(status_code=418, detail="i am a teapot ;)")
     return all_points
-
 
 
 @place_router.get("/point/{id}")
@@ -155,12 +196,14 @@ async def get_point_h(id: int):
         raise HTTPException(status_code=418, detail="i am a teapot ;)")
     return point
 
+
 @place_router.get("/types")
 async def get_all_types_h():
     all_types = await get_all_types()
     if not all_types:
         raise HTTPException(status_code=418, detail="i am a teapot ;)")
     return all_types
+
 
 @place_router.post("/")
 async def add_point_h(data: placeData) -> int:
@@ -171,14 +214,9 @@ async def add_point_h(data: placeData) -> int:
     return id
 
 
-
 @place_router.post("/change/{id}")
 async def change_place_h(id: int, data: placeData):
-    """
-    Изменяет информацию о месте и автоматически пересчитывает рейтинг
-    """
     place = data.dict()
-    # Удаляем None значения для частичных обновлений
     place = {k: v for k, v in place.items() if v is not None}
     result = await update_place(id, place)
     if not result:
@@ -188,33 +226,23 @@ async def change_place_h(id: int, data: placeData):
 
 @place_router.get("/search", response_model=List[placeResponseData])
 async def search_places_h(
-    place_type: Optional[int] = Query(None),
-    is_alcohol: Optional[bool] = Query(None),
-    is_health: Optional[bool] = Query(None),
-    is_nosmoking: Optional[bool] = Query(None),
-    is_smoke: Optional[bool] = Query(None),
-    max_distance: Optional[float] = Query(5),
-    is_moderated: Optional[bool] = Query(True),
-    has_product_type: Optional[List[int]] = Query(None),
-    has_equipment_type: Optional[List[int]] = Query(None),
-    has_ads_type: Optional[List[int]] = Query(None),
-    need_products: Optional[bool] = Query(None),
-    need_equipment: Optional[bool] = Query(None),
-    need_ads: Optional[bool] = Query(None)
+        place_type: Optional[int] = Query(None),
+        is_alcohol: Optional[bool] = Query(None),
+        is_health: Optional[bool] = Query(None),
+        is_nosmoking: Optional[bool] = Query(None),
+        is_smoke: Optional[bool] = Query(None),
+        max_distance: Optional[float] = Query(5),
+        is_moderated: Optional[bool] = Query(None),
+        has_product_type: Optional[List[int]] = Query(None),
+        has_equipment_type: Optional[List[int]] = Query(None),
+        has_ads_type: Optional[List[int]] = Query(None),
+        need_products: Optional[bool] = Query(None),
+        need_equipment: Optional[bool] = Query(None),
+        need_ads: Optional[bool] = Query(None),
+        limit: Optional[int] = Query(None),
+        offset: Optional[int] = Query(None),
+        page: Optional[int] = Query(None)
 ):
-    """
-    Поиск мест по фильтрам:
-    - place_type: тип места (ID)
-    - is_alcohol, is_health, is_nosmoking, is_smoke: флаги места
-    - max_distance: максимальное расстояние до центра Тулы в километрах
-    - is_moderated: флаг модерации
-    - has_product_type: список ID типов продуктов (можно указать несколько)
-    - has_equipment_type: список ID типов оборудования (можно указать несколько)
-    - has_ads_type: список ID типов рекламы (можно указать несколько)
-    - need_products: загружать ли данные о продуктах (true - загружать, false/None - не загружать)
-    - need_equipment: загружать ли данные об оборудовании (true - загружать, false/None - не загружать)
-    - need_ads: загружать ли данные о рекламе (true - загружать, false/None - не загружать)
-    """
     places = await search_places(
         place_type=place_type,
         is_alcohol=is_alcohol,
@@ -228,15 +256,16 @@ async def search_places_h(
         has_ads_type=has_ads_type,
         need_products=need_products,
         need_equipment=need_equipment,
-        need_ads=need_ads
+        need_ads=need_ads,
+        limit=limit,
+        offset=offset,
+        page=page
     )
     return places
 
 
-
 app.include_router(place_router, prefix="/place", tags=["place"])
 
-# User router
 user_router = APIRouter()
 
 
@@ -297,7 +326,6 @@ class FollowData(BaseModel):
 
 @user_router.post("/create")
 async def create_user_h(data: UserCreateData) -> dict:
-    """Создает нового пользователя"""
     user_id = await create_user(data.name, data.email, data.password)
     if user_id is None:
         raise HTTPException(status_code=400, detail="User already exists or error occurred")
@@ -306,7 +334,6 @@ async def create_user_h(data: UserCreateData) -> dict:
 
 @user_router.post("/login")
 async def login_user_h(data: UserLoginData) -> dict:
-    """Авторизует пользователя"""
     user_id = await login_user(data.email, data.password)
     if user_id is None:
         raise HTTPException(status_code=400, detail="Invalid email or password")
@@ -317,12 +344,14 @@ async def login_user_h(data: UserLoginData) -> dict:
 async def add_review_h(data: UserReviewData):
     if not data.message or not data.message.strip():
         raise HTTPException(status_code=418, detail="isNoGoodMessage")
-    
-    # Проверяем рейтинг (должен быть от 1 до 5)
-    if data.rating < 1 or data.rating > 5:
-        raise HTTPException(status_code=400, detail="Rating must be between 1 and 5")
 
-    # Добавляем отзыв в БД с фото, если они есть
+    if data.rating < 1 or data.rating > 5:
+        raise HTTPException(status_code=401, detail="Rating must be between 1 and 5")
+
+    toxic = classify_toxic_review(data.message)
+    if toxic:
+        raise HTTPException(status_code=418, detail="isNoGoodMessage")
+
     photo_urls = data.photos if data.photos else None
     result = await add_review(data.message, data.user_id, data.place_id, data.rating, photo_urls)
     if not result:
@@ -332,7 +361,6 @@ async def add_review_h(data: UserReviewData):
 
 @user_router.get("/{id}", response_model=UserResponseData)
 async def get_user_h(id: int):
-    """Возвращает информацию о пользователе по ID"""
     user = await get_user_by_id(id)
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
@@ -340,15 +368,17 @@ async def get_user_h(id: int):
 
 
 @user_router.get("/", response_model=List[UserResponseData])
-async def get_all_users_h():
-    """Возвращает список всех пользователей"""
-    users = await get_all_users()
+async def get_all_users_h(
+        limit: Optional[int] = Query(None),
+        offset: Optional[int] = Query(None),
+        page: Optional[int] = Query(None)
+):
+    users = await get_all_users(limit=limit, offset=offset, page=page)
     return users
 
 
 @user_router.delete("/review")
 async def delete_review_h(data: UserDeleteReviewData):
-    """Удаляет отзыв"""
     result = await delete_review(data.user_id, data.review_id)
     if result == 'not_author':
         raise HTTPException(status_code=418, detail="ты не автор")
@@ -359,11 +389,9 @@ async def delete_review_h(data: UserDeleteReviewData):
 
 @user_router.put("/update")
 async def update_user_h(data: UserUpdateData):
-    """Обновляет информацию о пользователе"""
     user_data = data.dict()
-    user_id = user_data.pop('user_id')  # Извлекаем user_id из данных
+    user_id = user_data.pop('user_id')
 
-    # Удаляем None значения для частичных обновлений
     user_data = {k: v for k, v in user_data.items() if v is not None}
 
     result = await update_user(user_id, user_data)
@@ -373,43 +401,46 @@ async def update_user_h(data: UserUpdateData):
 
 
 app.include_router(user_router, prefix="/users", tags=["user"])
+
+
 @user_router.post("/follow/")
 async def add_follow_h(data: FollowData):
-    """Подписывает пользователя user_id на пользователя follow_id"""
     result = await add_follow(data.user_id, data.follow_id)
     if not result:
-        raise HTTPException(status_code=400, detail="Failed to add follow. User may not exist, already following, or trying to follow self")
+        raise HTTPException(status_code=400,
+                            detail="Failed to add follow. User may not exist, already following, or trying to follow self")
     return {"status": "ok"}
 
 
 @user_router.get("/follow/{user_id}", response_model=List[reviewData])
-async def get_followed_reviews_h(user_id: int):
-    """Возвращает список отзывов от пользователей, на которых подписан user_id, отсортированные по id отзыва"""
-    reviews = await get_followed_reviews(user_id)
+async def get_followed_reviews_h(
+        user_id: int,
+        limit: Optional[int] = Query(None),
+        offset: Optional[int] = Query(None),
+        page: Optional[int] = Query(None)
+):
+    reviews = await get_followed_reviews(user_id, limit=limit, offset=offset, page=page)
     return reviews
 
 
 app.include_router(user_router, prefix="/user", tags=["user"])
 
-# Review rank router
 review_router = APIRouter()
 
 
 @review_router.post("/rank")
 async def set_review_rank_h(data: ReviewRankData):
-    """Устанавливает лайк или дизлайк на отзыв"""
     try:
-        # Проверяем, что передан хотя бы один параметр
         if data.like is None and data.dislike is None:
             raise HTTPException(status_code=400, detail="Either like or dislike must be provided")
 
-        # Проверяем, что не переданы оба параметра одновременно как True
         if data.like is True and data.dislike is True:
             raise HTTPException(status_code=400, detail="Cannot set both like and dislike to true")
 
         result = await set_review_rank(data.user_id, data.review_id, data.like, data.dislike)
         if not result:
-            logger.error(f"Failed to set review rank: user_id={data.user_id}, review_id={data.review_id}, like={data.like}, dislike={data.dislike}")
+            logger.error(
+                f"Failed to set review rank: user_id={data.user_id}, review_id={data.review_id}, like={data.like}, dislike={data.dislike}")
             raise HTTPException(status_code=400, detail="error")
         return {"status": "ok"}
     except HTTPException:
@@ -421,24 +452,19 @@ async def set_review_rank_h(data: ReviewRankData):
 
 app.include_router(review_router, prefix="/review", tags=["review"])
 
-# Photo router
 photo_router = APIRouter()
 
 
 @photo_router.post("/upload")
 async def upload_photo_h(request: FastAPIRequest):
-    """Загружает фото в MinIO и возвращает presigned URL для просмотра"""
     try:
-        # Читаем бинарные данные из тела запроса
         file_data = await request.body()
 
         if not file_data:
-            raise HTTPException(status_code=400, detail="No file data provided")
+            raise HTTPException(status_code=403, detail="No file data provided")
 
-        # Определяем расширение файла из Content-Type заголовка
         content_type = request.headers.get("content-type", "").lower()
 
-        # Маппинг MIME типов в расширения файлов
         mime_to_extension = {
             "image/png": "png",
             "image/jpeg": "jpg",
@@ -449,11 +475,17 @@ async def upload_photo_h(request: FastAPIRequest):
             "image/svg+xml": "svg",
         }
 
-        # Определяем расширение из Content-Type или используем jpg по умолчанию
         file_extension = mime_to_extension.get(content_type, "jpg")
 
-        # Загружаем в MinIO и получаем URL
         photo_url = upload_photo(file_data, file_extension)
+
+        moderation = moderate_image_by_url(photo_url)
+
+        if moderation not in [1, 2]:
+            return HTTPException(status_code=402, detail="Photo upload failed")
+
+        if moderation == 1:
+            return HTTPException(status_code=401, detail="Photo not moderation")
 
         return {"url": photo_url}
     except HTTPException:
@@ -465,13 +497,11 @@ async def upload_photo_h(request: FastAPIRequest):
 
 @photo_router.options("/upload")
 async def upload_photo_options():
-    """Обработка OPTIONS запроса для CORS"""
     return Response(status_code=204)
 
 
 app.include_router(photo_router, prefix="/photo", tags=["photo"])
 
-# Admin router
 admin_router = APIRouter()
 
 
@@ -504,16 +534,15 @@ class AdminDeleteReviewData(BaseModel):
 
 @admin_router.post("/create")
 async def create_admin_h(data: AdminCreateData) -> dict:
-    """Создает нового админа другим админом"""
     admin_id = await create_admin(data.id_invite, data.name, data.email, data.password)
     if admin_id is None:
-        raise HTTPException(status_code=400, detail="Admin creation failed: invite admin not found or email already exists")
+        raise HTTPException(status_code=400,
+                            detail="Admin creation failed: invite admin not found or email already exists")
     return {"id": admin_id}
 
 
 @admin_router.post("/login")
 async def login_admin_h(data: AdminLoginData) -> dict:
-    """Вход в учетную запись админа"""
     admin_id = await login_admin(data.email, data.pwd)
     if admin_id is None:
         raise HTTPException(status_code=400, detail="Invalid email or password")
@@ -522,7 +551,6 @@ async def login_admin_h(data: AdminLoginData) -> dict:
 
 @admin_router.put("/user")
 async def update_user_rating_h(data: AdminUpdateUserData) -> dict:
-    """Уменьшает/увеличивает рейтинг пользователя"""
     result = await update_user_rating(data.id_user, data.rating)
     if not result:
         raise HTTPException(status_code=400, detail="User not found or update failed")
@@ -531,7 +559,6 @@ async def update_user_rating_h(data: AdminUpdateUserData) -> dict:
 
 @admin_router.put("/place")
 async def verify_place_h(data: AdminVerifyPlaceData) -> dict:
-    """Помечает поле верификации места значением параметра"""
     result = await verify_place(data.id_place, data.verify)
     if not result:
         raise HTTPException(status_code=400, detail="Place not found or update failed")
@@ -540,7 +567,6 @@ async def verify_place_h(data: AdminVerifyPlaceData) -> dict:
 
 @admin_router.delete("/user/{id}")
 async def ban_user_h(id: int) -> dict:
-    """Забанить юзера, установить соответствующие параметры в БД"""
     result = await ban_user(id)
     if not result:
         raise HTTPException(status_code=400, detail="User not found or ban failed")
@@ -549,7 +575,6 @@ async def ban_user_h(id: int) -> dict:
 
 @admin_router.delete("/review")
 async def delete_review_admin_h(data: AdminDeleteReviewData) -> dict:
-    """Удалить отзыв на место, с возможностью (не обязательной) изменить рейтинг авто"""
     result = await delete_review_admin(data.id_review, data.rating)
     if not result:
         raise HTTPException(status_code=400, detail="Review not found or delete failed")
@@ -558,17 +583,12 @@ async def delete_review_admin_h(data: AdminDeleteReviewData) -> dict:
 
 app.include_router(admin_router, prefix="/admin", tags=["admin"])
 
-
-
 leader_router = APIRouter()
 
 
 @leader_router.get("/")
 async def get_leaderboard_h():
-    """Устанавливает лайк или дизлайк на отзыв"""
     try:
-        # Проверяем, что передан хотя бы один параметр
-
         result = await get_leaderboard()
         if not result:
             logger.error(f"Failed to get leaderboard")
@@ -582,3 +602,133 @@ async def get_leaderboard_h():
 
 
 app.include_router(leader_router, prefix="/leaderboard", tags=["leaderboard"])
+
+OPENROUTER_API_KEY = config.OPENROUTER_API_KEY
+
+
+def image_bytes_to_data_url(data: bytes, fallback_ext: str = "jpg") -> str:
+    mime_type = mimetypes.guess_type(f"file.{fallback_ext}")[0] or "image/jpeg"
+    b64 = base64.b64encode(data).decode("utf-8")
+    return f"data:{mime_type};base64,{b64}"
+
+
+def moderate_image_by_url(image_url: str) -> int:
+    api_key = OPENROUTER_API_KEY
+    if not api_key:
+        raise RuntimeError("OPENROUTER_API_KEY не задан")
+
+    resp = requests.get(image_url)
+    resp.raise_for_status()
+    image_bytes = resp.content
+
+    content_type = resp.headers.get("Content-Type", "").lower()
+    ext = "jpg"
+    if "png" in content_type:
+        ext = "png"
+    elif "webp" in content_type:
+        ext = "webp"
+    elif "gif" in content_type:
+        ext = "gif"
+
+    image_data_url = image_bytes_to_data_url(image_bytes, fallback_ext=ext)
+
+    url = "https://openrouter.ai/api/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+
+    prompt_text = (
+        "Проанализируй это изображение по следующим критериям и ответь, "
+        "нарушен ли какой-то из пунктов ниже:\n\n"
+        "1) Есть ли на изображении контент 18+ (обнажёнка, порнография, сексуальные позы, "
+        "явно сексуализированная одежда/фетиш, любые сцены сексуального характера).\n"
+        "2) Есть ли на изображении оружие (огнестрельное, холодное, взрывчатка, реалистичные макеты).\n"
+        "3) Занимает ли полностью фотографию человек в полный рост (видны голова, торс и ноги полностью).\n\n"
+        "Если нарушение есть, верни 1.\n"
+        "Если нарушений нет, верни 0.\n"
+        "ВЕРНИ ТОЛЬКО ЧИСЛО."
+    )
+
+    payload = {
+        "model": "qwen/qwen2.5-vl-72b-instruct",
+        "temperature": 0,
+        "messages": [
+            {
+                "role": "system",
+                "content": "Ты модератор контента. Отвечай строго одним числом без лишнего текста.",
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": prompt_text,
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": image_data_url,
+                        },
+                    },
+                ],
+            },
+        ],
+    }
+
+    response = requests.post(url, headers=headers, data=json.dumps(payload))
+    if response.status_code != 200:
+        raise RuntimeError(f"OpenRouter API error: {response.status_code} {response.text}")
+
+    data = response.json()
+
+    try:
+        content = data["choices"][0]["message"]["content"]
+    except (KeyError, IndexError) as e:
+        raise RuntimeError(f"Unexpected response format: {data}") from e
+
+    content_stripped = str(content).strip()
+
+    if content_stripped not in ("0", "1"):
+        raise RuntimeError(f"Unexpected model output (expected '0' or '1'): {content_stripped}")
+
+    return int(content_stripped)
+
+
+def ask_gpt(text: str) -> str:
+    completion = client.chat.completions.create(
+        model="openai/gpt-4.1-nano",
+        messages=[
+            {
+                "role": "user",
+                "content": text,
+            }
+        ],
+    )
+    return completion.choices[0].message.content.strip()
+
+
+gpt_router = APIRouter()
+
+
+class GPTRequest(BaseModel):
+    text: str
+
+
+class GPTResponse(BaseModel):
+    answer: str
+
+
+@gpt_router.post("/chat", response_model=GPTResponse)
+async def gpt_chat_h(data: GPTRequest):
+    if not data.text or not data.text.strip():
+        raise HTTPException(status_code=400, detail="Text is empty")
+
+    try:
+        answer = ask_gpt(data.text)
+        return GPTResponse(answer=answer)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"GPT error: {str(e)}")
+
+
+app.include_router(gpt_router, prefix="/gpt", tags=["gpt"])

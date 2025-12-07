@@ -1,7 +1,12 @@
 export { default as Header } from './Header';
+export { default as BottomNav } from './BottomNav';
 export { default as MapView } from './MapView';
 export { default as ListView } from './ListView';
 export { default as BottomSheet } from './BottomSheet';
 export { default as ReviewForm } from './ReviewForm';
+export { default as ReviewCard } from './ReviewCard';
+export { default as PlaceCard } from './PlaceCard';
 export { default as AuthModal } from './AuthModal';
 export { default as FilterModal } from './FilterModal';
+export { default as AddPlaceModal } from './AddPlaceModal';
+export { default as EditPlaceModal } from './EditPlaceModal';

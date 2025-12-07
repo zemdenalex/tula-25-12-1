@@ -1,218 +1,217 @@
-import { useState } from 'react';
-import { X, Mail, Lock, User, Loader2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { XMarkIcon } from '@heroicons/react/24/outline';
 import { useStore } from '../store';
-import { usersApi } from '../api';
 
-type AuthMode = 'login' | 'register';
+interface AuthModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  initialMode?: 'login' | 'register';
+}
 
-export default function AuthModal() {
-  const { isAuthModalOpen, setAuthModalOpen, setUserId, fetchUserById } = useStore();
-  
-  const [mode, setMode] = useState<AuthMode>('login');
+const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMode = 'login' }) => {
+  const [mode, setMode] = useState<'login' | 'register'>(initialMode);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  if (!isAuthModalOpen) return null;
+  const { login, register, authError } = useStore();
 
-  const handleClose = () => {
-    setAuthModalOpen(false);
-    setName('');
-    setEmail('');
-    setPassword('');
-    setError('');
-  };
+  useEffect(() => {
+    setMode(initialMode);
+  }, [initialMode]);
 
-  const switchMode = (newMode: AuthMode) => {
-    setMode(newMode);
-    setError('');
-  };
+  useEffect(() => {
+    if (authError) {
+      setError(authError);
+    }
+  }, [authError]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!email.trim() || !password.trim()) {
-      setError('Заполните все обязательные поля');
-      return;
-    }
-
-    if (mode === 'register' && !name.trim()) {
-      setError('Введите имя');
-      return;
-    }
-
-    if (password.length < 4) {
-      setError('Пароль должен быть не менее 4 символов');
-      return;
-    }
-
-    setIsSubmitting(true);
-    setError('');
+    setError(null);
+    setIsLoading(true);
 
     try {
-      let userId: number;
-      
-      if (mode === 'login') {
-        const result = await usersApi.login({ email, password });
-        userId = result.user_id;
+      if (mode === 'register') {
+        if (password !== confirmPassword) {
+          setError('Пароли не совпадают');
+          setIsLoading(false);
+          return;
+        }
+        if (password.length < 6) {
+          setError('Пароль должен содержать минимум 6 символов');
+          setIsLoading(false);
+          return;
+        }
+        const success = await register(name, email, password);
+        if (success) {
+          onClose();
+          resetForm();
+        }
       } else {
-        const result = await usersApi.create({ name, email, password });
-        userId = result.user_id;
+        const success = await login(email, password);
+        if (success) {
+          onClose();
+          resetForm();
+        }
       }
-      
-      setUserId(userId);
-      await fetchUserById(userId);
-      handleClose();
     } catch (err: any) {
       console.error('Auth error:', err);
-      if (err.response?.status === 400) {
-        setError(mode === 'login' 
-          ? 'Неверный email или пароль' 
-          : 'Пользователь с таким email уже существует'
-        );
-      } else if (err.code === 'ERR_NETWORK') {
-        setError('Ошибка сети. Проверьте подключение к интернету.');
-      } else {
-        setError('Произошла ошибка. Попробуйте позже.');
-      }
+      setError(err.message || 'Произошла ошибка');
     } finally {
-      setIsSubmitting(false);
+      setIsLoading(false);
     }
   };
 
+  const resetForm = () => {
+    setName('');
+    setEmail('');
+    setPassword('');
+    setConfirmPassword('');
+    setError(null);
+  };
+
+  const switchMode = () => {
+    setMode(mode === 'login' ? 'register' : 'login');
+    setError(null);
+  };
+
+  if (!isOpen) return null;
+
   return (
-    <>
-      <div 
-        className="fixed inset-0 bg-black/50 z-50"
-        onClick={handleClose}
-      />
-      
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex min-h-full items-center justify-center p-4">
+        {/* Backdrop */}
         <div 
-          className="bg-white rounded-3xl w-full max-w-md"
-          onClick={(e) => e.stopPropagation()}
-        >
+          className="fixed inset-0 bg-black/50 transition-opacity"
+          onClick={onClose}
+        />
+
+        {/* Modal */}
+        <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md p-6 transform transition-all">
+          {/* Close button */}
+          <button
+            onClick={onClose}
+            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+          >
+            <XMarkIcon className="w-6 h-6" />
+          </button>
+
           {/* Header */}
-          <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-            <div className="w-8" />
-            <h2 className="font-semibold text-lg">
-              {mode === 'login' ? 'Вход' : 'Регистрация'}
+          <div className="text-center mb-6">
+            <h2 className="text-2xl font-bold text-gray-900">
+              {mode === 'login' ? 'Вход в аккаунт' : 'Регистрация'}
             </h2>
-            <button
-              onClick={handleClose}
-              className="p-2 -mr-2 text-gray-500 hover:text-gray-700"
-            >
-              <X size={24} />
-            </button>
+            <p className="text-gray-500 mt-2">
+              {mode === 'login' 
+                ? 'Войдите, чтобы оставлять отзывы и добавлять места' 
+                : 'Создайте аккаунт, чтобы начать пользоваться'}
+            </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="p-6">
-            {/* Mode toggle */}
-            <div className="flex bg-gray-100 rounded-xl p-1 mb-6">
-              <button
-                type="button"
-                onClick={() => switchMode('login')}
-                className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                  mode === 'login' 
-                    ? 'bg-white text-gray-900 shadow-sm' 
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                Вход
-              </button>
-              <button
-                type="button"
-                onClick={() => switchMode('register')}
-                className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                  mode === 'register' 
-                    ? 'bg-white text-gray-900 shadow-sm' 
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                Регистрация
-              </button>
+          {/* Error message */}
+          {error && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+              {error}
             </div>
+          )}
 
-            {/* Form fields */}
-            <div className="space-y-4">
-              {mode === 'register' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Имя
-                  </label>
-                  <div className="relative">
-                    <User className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-                    <input
-                      type="text"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="Ваше имя"
-                      className="input-field pl-12"
-                      autoComplete="name"
-                    />
-                  </div>
-                </div>
-              )}
-
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {mode === 'register' && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Email
+                <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
+                  Имя
                 </label>
-                <div className="relative">
-                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="example@mail.ru"
-                    className="input-field pl-12"
-                    autoComplete="email"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Пароль
-                </label>
-                <div className="relative">
-                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="input-field pl-12"
-                    autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Error */}
-            {error && (
-              <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm">
-                {error}
+                <input
+                  id="name"
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="input"
+                  placeholder="Введите ваше имя"
+                  required
+                />
               </div>
             )}
 
-            {/* Submit */}
+            <div>
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+                Email
+              </label>
+              <input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="input"
+                placeholder="example@mail.com"
+                required
+              />
+            </div>
+
+            <div>
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+                Пароль
+              </label>
+              <input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="input"
+                placeholder="••••••••"
+                required
+                minLength={6}
+              />
+            </div>
+
+            {mode === 'register' && (
+              <div>
+                <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">
+                  Подтвердите пароль
+                </label>
+                <input
+                  id="confirmPassword"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="input"
+                  placeholder="••••••••"
+                  required
+                  minLength={6}
+                />
+              </div>
+            )}
+
             <button
               type="submit"
-              disabled={isSubmitting}
-              className="btn-primary w-full mt-6 flex items-center justify-center gap-2"
+              disabled={isLoading}
+              className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium py-3 rounded-lg transition-colors"
             >
-              {isSubmitting && <Loader2 size={20} className="animate-spin" />}
-              {isSubmitting 
-                ? 'Загрузка...' 
-                : mode === 'login' ? 'Войти' : 'Зарегистрироваться'
-              }
+              {isLoading ? 'Загрузка...' : mode === 'login' ? 'Войти' : 'Зарегистрироваться'}
             </button>
           </form>
+
+          {/* Switch mode */}
+          <div className="mt-6 text-center">
+            <p className="text-gray-600">
+              {mode === 'login' ? 'Нет аккаунта?' : 'Уже есть аккаунт?'}
+              <button
+                onClick={switchMode}
+                className="ml-2 text-blue-600 hover:text-blue-700 font-medium"
+              >
+                {mode === 'login' ? 'Зарегистрироваться' : 'Войти'}
+              </button>
+            </p>
+          </div>
         </div>
       </div>
-    </>
+    </div>
   );
-}
+};
+
+export default AuthModal;

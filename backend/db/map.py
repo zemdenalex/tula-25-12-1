@@ -58,7 +58,7 @@ LEFT JOIN sport_type st ON st.id = p.sporttype
         if limit is not None:
             if offset is not None and page is not None:
                 calculated_offset = offset
-                base_query += f" LIMIT {limit} OFFSET {calculated_offset}"
+                query += f" LIMIT {limit} OFFSET {calculated_offset}"
             elif offset is not None:
                 query += f" LIMIT {limit} OFFSET {offset}"
             else:

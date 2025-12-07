@@ -11,7 +11,7 @@ import os
 
 from db.map import get_all_places, add_place, get_all_types, get_place, search_places, update_place
 from db.map import get_all_places, add_place, get_all_types, get_place
-from db.user import create_user, login_user, add_review, get_all_users, get_user_by_id, delete_review, set_review_rank
+from db.user import create_user, login_user, add_review, get_all_users, get_user_by_id, delete_review, set_review_rank, update_user
 from s3_client import upload_photo
 from db.map import get_all_places, add_place, get_all_types, get_place
 from db.user import create_user, login_user, add_review, get_all_users, get_user_by_id, delete_review
@@ -108,6 +108,7 @@ class placeData(BaseModel):
     products: Optional[list[productData]] = None
     equipment: Optional[list[equipmentData]] = None
     ads: Optional[list[equipmentData]] = None
+    photos: Optional[List[str]] = None
 
 
 class placeUpdateData(BaseModel):
@@ -123,6 +124,7 @@ class placeUpdateData(BaseModel):
     products: Optional[list[productData]] = None
     equipment: Optional[list[equipmentData]] = None
     ads: Optional[list[adsData]] = None
+    photos: Optional[List[str]] = None
 
 
 class placeResponseData(BaseModel):
@@ -147,6 +149,7 @@ class placeResponseData(BaseModel):
     equipment: list[equipmentData] = []
     ads: list[adsData] = []
     reviews: list[reviewData] = []
+    photos: List[str] = []
 
 
 @place_router.get("/", response_model=List[placeResponseData])
@@ -290,6 +293,16 @@ class ReviewRankData(BaseModel):
     dislike: Optional[bool] = None
 
 
+class UserUpdateData(BaseModel):
+    user_id: int
+    name: Optional[str] = None
+    email: Optional[str] = None
+    password: Optional[str] = None
+    rating: Optional[int] = None
+    phone: Optional[str] = None
+    photo: Optional[str] = None
+
+
 @user_router.post("/create")
 async def create_user_h(data: UserCreateData) -> dict:
     """Создает нового пользователя"""
@@ -352,7 +365,22 @@ async def delete_review_h(data: UserDeleteReviewData):
     return {"status": "ok"}
 
 
-app.include_router(user_router, prefix="/user", tags=["user"])
+@user_router.put("/update")
+async def update_user_h(data: UserUpdateData):
+    """Обновляет информацию о пользователе"""
+    user_data = data.dict()
+    user_id = user_data.pop('user_id')  # Извлекаем user_id из данных
+    
+    # Удаляем None значения для частичных обновлений
+    user_data = {k: v for k, v in user_data.items() if v is not None}
+    
+    result = await update_user(user_id, user_data)
+    if not result:
+        raise HTTPException(status_code=400, detail="User not found or update failed")
+    return {"success": True, "message": f"Information updated for user {user_id}"}
+
+
+app.include_router(user_router, prefix="/users", tags=["user"])
 
 # Review rank router
 review_router = APIRouter()

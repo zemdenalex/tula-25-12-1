@@ -146,12 +146,20 @@ LEFT JOIN sport_type st ON st.id = p.sporttype;
             review_rank_row = cursor.fetchone()
             review_rank = float(review_rank_row[0]) if review_rank_row[0] is not None else 0.0
 
+            # Получаем фотографии для этого места
+            query_photos = sql.SQL("""
+                SELECT url FROM places_photos WHERE place_id = %s
+            """)
+            cursor.execute(query_photos, (id,))
+            rows_photos = cursor.fetchall()
+            photos = [row_photo[0] for row_photo in rows_photos]
+
             place = {"id": row[0], "name": row[1], "coord1": row[2], "coord2": row[3],
                      "type": row[4], "food_type": row[5], "is_alcohol": row[6],
                      "is_health": row[7], "is_insurance": row[8], "is_nosmoking": row[9],
                      "is_smoke": row[10], "rating": row[11], "sport_type": row[12], "info": row[13], "products": products,
                      "ads": ads,
-                     "reviews": reviews, "equipment": sports, "review_rank": review_rank}
+                     "reviews": reviews, "equipment": sports, "review_rank": review_rank, "photos": photos}
             places.append(place)
         return places
 
@@ -287,12 +295,20 @@ LEFT JOIN sport_type st ON st.id = p.sporttype WHERE p.id = %s;
         review_rank_row = cursor.fetchone()
         review_rank = float(review_rank_row[0]) if review_rank_row[0] is not None else 0.0
 
+        # Получаем фотографии для этого места
+        query_photos = sql.SQL("""
+            SELECT url FROM places_photos WHERE place_id = %s
+        """)
+        cursor.execute(query_photos, (id,))
+        rows_photos = cursor.fetchall()
+        photos = [row_photo[0] for row_photo in rows_photos]
+
         place = {"id": row[0], "name": row[1], "coord1": row[2], "coord2": row[3],
                  "type": row[4], "food_type": row[5], "is_alcohol": row[6],
                  "is_health": row[7], "is_insurance": row[8], "is_nosmoking": row[9],
                  "is_smoke": row[10], "rating": row[11], "sport_type": row[12], "info": row[13], "products": products,
                  "ads": ads,
-                 "reviews": reviews, "equipment": sports, "review_rank": review_rank}
+                 "reviews": reviews, "equipment": sports, "review_rank": review_rank, "photos": photos}
 
         return place
 
@@ -425,6 +441,15 @@ returning id;
 
             for sport in place['equipment']:
                 cursor.execute(query_sport, (id, sport['type'], sport['count']))
+        
+        # Сохраняем фотографии если они предоставлены
+        if place.get('photos'):
+            query_photo = sql.SQL("""
+                INSERT INTO places_photos (place_id, url) VALUES (%s, %s)
+            """)
+            for photo_url in place['photos']:
+                cursor.execute(query_photo, (id, photo_url))
+        
         cursor.connection.commit()
         
         # Автоматически пересчитываем рейтинг после создания места
@@ -604,6 +629,19 @@ async def update_place(place_id: int, place_data: dict) -> bool:
             """)
             for sport in place_data['equipment']:
                 cursor.execute(query_sport, (place_id, sport.get('type'), sport.get('count')))
+
+        # Обновляем фотографии если они предоставлены (удаляем старые и добавляем новые)
+        if 'photos' in place_data and place_data['photos'] is not None:
+            # Удаляем все существующие фотографии для этого места
+            query_delete_photos = sql.SQL("DELETE FROM places_photos WHERE place_id = %s")
+            cursor.execute(query_delete_photos, (place_id,))
+            
+            # Добавляем новые фотографии
+            query_photo = sql.SQL("""
+                INSERT INTO places_photos (place_id, url) VALUES (%s, %s)
+            """)
+            for photo_url in place_data['photos']:
+                cursor.execute(query_photo, (place_id, photo_url))
 
         cursor.connection.commit()
         
@@ -859,12 +897,20 @@ WHERE p.coord1 IS NOT NULL AND p.coord2 IS NOT NULL
             review_rank_row = cursor.fetchone()
             review_rank = float(review_rank_row[0]) if review_rank_row[0] is not None else 0.0
 
+            # Получаем фотографии для этого места
+            query_photos = sql.SQL("""
+                SELECT url FROM places_photos WHERE place_id = %s
+            """)
+            cursor.execute(query_photos, (id,))
+            rows_photos = cursor.fetchall()
+            photos = [row_photo[0] for row_photo in rows_photos]
+
             place = {"id": row[0], "name": row[1], "coord1": row[2], "coord2": row[3],
                      "type": row[4], "food_type": row[5], "is_alcohol": row[6],
                      "is_health": row[7], "is_insurance": row[8], "is_nosmoking": row[9],
                      "is_smoke": row[10], "rating": row[11], "sport_type": row[12], "info": row[13],
                      "distance_to_center": row[14], "is_moderated": row[15],
-                     "reviews": reviews, "review_rank": review_rank}
+                     "reviews": reviews, "review_rank": review_rank, "photos": photos}
             
             # Добавляем поля только если они загружены
             if need_products is True:

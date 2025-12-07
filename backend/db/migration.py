@@ -145,6 +145,18 @@ CREATE TABLE IF NOT EXISTS admins (
     name varchar
 );
 
+CREATE TABLE IF NOT EXISTS places_photos (
+    id serial PRIMARY KEY,
+    place_id int,
+    url varchar
+);
+
+CREATE TABLE IF NOT EXISTS users_photos (
+    id serial PRIMARY KEY,
+    user_id int,
+    url varchar
+);
+
 """)
 
         cur.execute(create)
@@ -165,6 +177,22 @@ CREATE TABLE IF NOT EXISTS admins (
                     IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
                                    WHERE table_name='reviews' AND column_name='rating') THEN
                         ALTER TABLE reviews ADD COLUMN rating int;
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.tables 
+                                   WHERE table_name='places_photos') THEN
+                        CREATE TABLE places_photos (
+                            id serial PRIMARY KEY,
+                            place_id int,
+                            url varchar
+                        );
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.tables 
+                                   WHERE table_name='users_photos') THEN
+                        CREATE TABLE users_photos (
+                            id serial PRIMARY KEY,
+                            user_id int,
+                            url varchar
+                        );
                     END IF;
                 END $$;
             """)
@@ -187,7 +215,7 @@ def migration_down():
     try:
         drop = sql.SQL("""DROP TABLE IF EXISTS admins, places, places_type, product,
                             product_type, reklama, reklama_type, reviews, reviews_photo, reviews_ranks, sport_type, sport_interfaces,
-                            sport_interfaces_place, food_type, users;""")
+                            sport_interfaces_place, food_type, users, places_photos, users_photos;""")
 
         cur.execute(drop)
         conn.commit()

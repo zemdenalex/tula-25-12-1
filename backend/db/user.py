@@ -2,6 +2,8 @@ import hashlib
 import psycopg2
 from psycopg2 import sql
 import logging
+from datetime import datetime
+from typing import Optional
 
 from db.migration import db_connection
 
@@ -155,7 +157,7 @@ async def get_all_users() -> list:
 
     try:
         query = sql.SQL("""
-            SELECT id, name, email, phone, photo, rating
+            SELECT id, name, email, phone, rating
             FROM users
             ORDER BY id
         """)
@@ -164,13 +166,22 @@ async def get_all_users() -> list:
         rows = cursor.fetchall()
         users = []
         for row in rows:
+            user_id = row[0]
+            # Получаем фото из таблицы users_photos для каждого пользователя
+            query_photo = sql.SQL("""
+                SELECT url FROM users_photos WHERE user_id = %s LIMIT 1
+            """)
+            cursor.execute(query_photo, (user_id,))
+            photo_row = cursor.fetchone()
+            photo = photo_row[0] if photo_row else None
+            
             user = {
-                "user_id": row[0],
+                "user_id": user_id,
                 "name": row[1],
                 "email": row[2],
                 "phone": row[3],
-                "photo": row[4],
-                "rating": row[5]
+                "rating": row[4],
+                "photo": photo
             }
             users.append(user)
         return users
@@ -192,7 +203,7 @@ async def get_user_by_id(user_id: int) -> dict:
 
     try:
         query = sql.SQL("""
-            SELECT id, name, email, phone, photo, rating
+            SELECT id, name, email, phone, rating
             FROM users
             WHERE id = %s
         """)
@@ -200,13 +211,21 @@ async def get_user_by_id(user_id: int) -> dict:
 
         row = cursor.fetchone()
         if row:
+            # Получаем фото из таблицы users_photos
+            query_photo = sql.SQL("""
+                SELECT url FROM users_photos WHERE user_id = %s LIMIT 1
+            """)
+            cursor.execute(query_photo, (user_id,))
+            photo_row = cursor.fetchone()
+            photo = photo_row[0] if photo_row else None
+            
             user = {
                 "user_id": row[0],
                 "name": row[1],
                 "email": row[2],
                 "phone": row[3],
-                "photo": row[4],
-                "rating": row[5]
+                "rating": row[4],
+                "photo": photo
             }
             return user
         return None
@@ -253,6 +272,80 @@ async def delete_review(user_id: int, review_id: int) -> str:
         logger.error(error)
         connection.rollback()
         return 'error'
+    finally:
+        if connection:
+            cursor.close()
+            connection.close()
+            logger.info('Database connection closed.')
+
+
+async def update_user(user_id: int, user_data: dict) -> bool:
+    """
+    Обновляет информацию о пользователе. 
+    Принимает словарь с полями для обновления (все опциональные, кроме user_id).
+    Возвращает True при успехе, False при ошибке.
+    """
+    connection = db_connection()
+    cursor = connection.cursor()
+
+    try:
+        # Проверяем, существует ли пользователь
+        check_query = sql.SQL("SELECT id FROM users WHERE id = %s")
+        cursor.execute(check_query, (user_id,))
+        if not cursor.fetchone():
+            return False
+
+        # Строим UPDATE запрос динамически
+        update_fields = []
+        update_values = []
+
+        if 'name' in user_data and user_data['name'] is not None:
+            update_fields.append("name = %s")
+            update_values.append(user_data['name'])
+
+        if 'email' in user_data and user_data['email'] is not None:
+            update_fields.append("email = %s")
+            update_values.append(user_data['email'])
+
+        if 'password' in user_data and user_data['password'] is not None:
+            # Хешируем пароль перед сохранением
+            hashed_password = hash_password(user_data['password'])
+            update_fields.append("password = %s")
+            update_values.append(hashed_password)
+
+        if 'rating' in user_data and user_data['rating'] is not None:
+            update_fields.append("rating = %s")
+            update_values.append(user_data['rating'])
+
+        if 'phone' in user_data and user_data['phone'] is not None:
+            update_fields.append("phone = %s")
+            update_values.append(user_data['phone'])
+
+        # Обновляем основные поля пользователя
+        if update_fields:
+            update_query = "UPDATE users SET " + ", ".join(update_fields) + " WHERE id = %s"
+            update_values.append(user_id)
+            cursor.execute(update_query, tuple(update_values))
+
+        # Обрабатываем фото отдельно через таблицу users_photos
+        if 'photo' in user_data and user_data['photo'] is not None:
+            # Удаляем все существующие фотографии для этого пользователя
+            query_delete_photos = sql.SQL("DELETE FROM users_photos WHERE user_id = %s")
+            cursor.execute(query_delete_photos, (user_id,))
+            
+            # Добавляем новую фотографию
+            query_photo = sql.SQL("""
+                INSERT INTO users_photos (user_id, url) VALUES (%s, %s)
+            """)
+            cursor.execute(query_photo, (user_id, user_data['photo']))
+
+        connection.commit()
+        return True
+
+    except (Exception, psycopg2.DatabaseError) as error:
+        logger.error(f"Ошибка при обновлении пользователя: {error}")
+        connection.rollback()
+        return False
     finally:
         if connection:
             cursor.close()

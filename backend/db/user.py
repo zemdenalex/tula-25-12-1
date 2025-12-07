@@ -45,7 +45,7 @@ async def create_user(name: str, email: str, password: str) -> int:
             RETURNING id;
         """)
         cursor.execute(query, (name, email, hashed_password))
-        
+
         row = cursor.fetchone()
         user_id = row[0]
         connection.commit()
@@ -69,13 +69,13 @@ async def login_user(email: str, password: str) -> int:
 
     try:
         hashed_password = hash_password(password)
-        
+
         query = sql.SQL("""
             SELECT id FROM users 
             WHERE email = %s AND password = %s
         """)
         cursor.execute(query, (email, hashed_password))
-        
+
         row = cursor.fetchone()
         if row:
             return row[0]
@@ -98,10 +98,19 @@ async def add_review(message: str, user_id: int, place_id: int, rating: int, pho
 
     try:
         # Проверяем, существует ли пользователь
-        check_user = sql.SQL("SELECT id FROM users WHERE id = %s")
+        check_user = sql.SQL("SELECT id, rating FROM users WHERE id = %s")
         cursor.execute(check_user, (user_id,))
-        if not cursor.fetchone():
+        row = cursor.fetchone()
+        if not row:
             return False
+        else:
+            add_rating_cnt = 5
+            if photo_urls and len(photo_urls) > 0:
+                add_rating_cnt += 10
+            add_rating = """UPDATE users 
+                                SET rating = %s
+                                WHERE id = %s"""
+            cursor.execute(add_rating, (row[1] + add_rating_cnt, user_id))
 
         # Проверяем, существует ли место
         check_place = sql.SQL("SELECT id FROM places WHERE id = %s")
@@ -124,9 +133,9 @@ async def add_review(message: str, user_id: int, place_id: int, rating: int, pho
             RETURNING id
         """)
         cursor.execute(query, (user_id, place_id, message.strip(), rating))
-        
+
         review_id = cursor.fetchone()[0]
-        
+
         # Добавляем фото, если они есть
         if photo_urls:
             photo_query = sql.SQL("""
@@ -135,7 +144,7 @@ async def add_review(message: str, user_id: int, place_id: int, rating: int, pho
             """)
             for photo_url in photo_urls:
                 cursor.execute(photo_query, (review_id, photo_url))
-        
+
         connection.commit()
         return True
 
@@ -161,7 +170,7 @@ async def get_all_users(limit: Optional[int] = None, offset: Optional[int] = Non
             FROM users
             ORDER BY id
         """
-        
+
         # Добавляем LIMIT и OFFSET если они указаны
         if limit is not None:
             if offset is not None and page is not None:
@@ -171,7 +180,7 @@ async def get_all_users(limit: Optional[int] = None, offset: Optional[int] = Non
                 base_query += f" LIMIT {limit} OFFSET {offset}"
             else:
                 base_query += f" LIMIT {limit}"
-        
+
         # Выполняем запрос напрямую, так как LIMIT/OFFSET не могут быть параметрами
         cursor.execute(base_query)
 
@@ -186,7 +195,7 @@ async def get_all_users(limit: Optional[int] = None, offset: Optional[int] = Non
             cursor.execute(query_photo, (user_id,))
             photo_row = cursor.fetchone()
             photo = photo_row[0] if photo_row else None
-            
+
             user = {
                 "user_id": user_id,
                 "name": row[1],
@@ -230,7 +239,7 @@ async def get_user_by_id(user_id: int) -> dict:
             cursor.execute(query_photo, (user_id,))
             photo_row = cursor.fetchone()
             photo = photo_row[0] if photo_row else None
-            
+
             user = {
                 "user_id": row[0],
                 "name": row[1],
@@ -263,11 +272,11 @@ async def delete_review(user_id: int, review_id: int) -> str:
             SELECT idUser FROM reviews WHERE id = %s
         """)
         cursor.execute(check_query, (review_id,))
-        
+
         row = cursor.fetchone()
         if not row:
             return 'error'  # Отзыв не найден
-        
+
         if row[0] != user_id:
             return 'not_author'  # Пользователь не является автором
 
@@ -276,7 +285,7 @@ async def delete_review(user_id: int, review_id: int) -> str:
             DELETE FROM reviews WHERE id = %s
         """)
         cursor.execute(delete_query, (review_id,))
-        
+
         connection.commit()
         return 'ok'
 
@@ -306,6 +315,13 @@ async def update_user(user_id: int, user_data: dict) -> bool:
         cursor.execute(check_query, (user_id,))
         if not cursor.fetchone():
             return False
+
+        check = ("""SELECT u.name, u.email, u.password, up.url, u.phone from users as u 
+                         left join users_photos as up on up.user_id = u.id
+                         WHERE u.id = %s""")
+        cursor.execute(check, (user_id,))
+        row = cursor.fetchone()
+        cnt = [elem for elem in row].count(None)
 
         # Строим UPDATE запрос динамически
         update_fields = []
@@ -344,12 +360,26 @@ async def update_user(user_id: int, user_data: dict) -> bool:
             # Удаляем все существующие фотографии для этого пользователя
             query_delete_photos = sql.SQL("DELETE FROM users_photos WHERE user_id = %s")
             cursor.execute(query_delete_photos, (user_id,))
-            
+
             # Добавляем новую фотографию
             query_photo = sql.SQL("""
                 INSERT INTO users_photos (user_id, url) VALUES (%s, %s)
             """)
             cursor.execute(query_photo, (user_id, user_data['photo']))
+
+        check = ("""SELECT u.rating, u.name, u.email, u.password, up.url, u.phone from users as u 
+                 left join users_photos as up on up.user_id = u.id
+                 WHERE u.id = %s""")
+        cursor.execute(check, (user_id, ))
+        row = cursor.fetchone()
+        cnt_2 = [elem for elem in row].count(None)
+        if cnt_2 == 0 and cnt != 0:
+            add_rating = """UPDATE users 
+                                    SET rating = %s
+                                    WHERE id = %s"""
+            cursor.execute(add_rating, (row[0] + 15, user_id))
+
+
 
         connection.commit()
         return True
@@ -386,9 +416,10 @@ async def set_review_rank(user_id: int, review_id: int, like: bool = None, disli
             return False
 
         # Проверяем, существует ли пользователь
-        check_user = sql.SQL("SELECT id FROM users WHERE id = %s")
+        check_user = sql.SQL("SELECT id, rating FROM users WHERE id = %s")
         cursor.execute(check_user, (user_id,))
-        if not cursor.fetchone():
+        row = cursor.fetchone()
+        if not row:
             return False
 
         # Проверяем, существует ли уже запись для этого пользователя и отзыва
@@ -414,6 +445,15 @@ async def set_review_rank(user_id: int, review_id: int, like: bool = None, disli
                         WHERE id = %s
                     """)
                     cursor.execute(update_query, (existing_id,))
+                    add_rating = """UPDATE users 
+                                        SET rating = %s
+                                        WHERE id = %s"""
+                    cursor.execute(add_rating, (row[1] + 1, user_id))
+                else:
+                    add_rating = """UPDATE users 
+                                        SET rating = %s
+                                        WHERE id = %s"""
+                    cursor.execute(add_rating, (row[1] + 1, user_id))
             else:
                 # Создаем новую запись с like
                 insert_query = sql.SQL("""
@@ -466,11 +506,16 @@ async def add_follow(user_id: int, follow_id: int) -> bool:
 
     try:
         # Проверяем, что оба пользователя существуют
-        check_user = sql.SQL("SELECT id FROM users WHERE id = %s")
+        check_user = sql.SQL("SELECT id, rating FROM users WHERE id = %s")
         cursor.execute(check_user, (user_id,))
-        if not cursor.fetchone():
+        row = cursor.fetchone()
+        if not row:
             return False
-
+        else:
+            add_rating = """UPDATE users 
+                        SET rating = %s
+                        WHERE id = %s"""
+            cursor.execute(add_rating, (row[1] + 1, user_id))
         cursor.execute(check_user, (follow_id,))
         if not cursor.fetchone():
             return False
@@ -493,7 +538,7 @@ async def add_follow(user_id: int, follow_id: int) -> bool:
             VALUES (%s, %s)
         """)
         cursor.execute(query, (user_id, follow_id,))
-        
+
         connection.commit()
         return True
 
@@ -529,7 +574,7 @@ async def get_followed_reviews(user_id: int, limit: Optional[int] = None, offset
             WHERE f.user_id = %s
             ORDER BY r.id
         """
-        
+
         # Добавляем LIMIT и OFFSET если они указаны
         if limit is not None:
             if offset is not None and page is not None:
@@ -539,16 +584,16 @@ async def get_followed_reviews(user_id: int, limit: Optional[int] = None, offset
                 base_query += f" LIMIT {limit} OFFSET {offset}"
             else:
                 base_query += f" LIMIT {limit}"
-        
+
         # Выполняем запрос напрямую, так как LIMIT/OFFSET не могут быть параметрами
         cursor.execute(base_query, (user_id,))
         
         rows = cursor.fetchall()
         reviews = []
-        
+
         for row in rows:
             review_id = row[0]
-            
+
             # Получаем фото для этого отзыва
             query_photos = sql.SQL("""
                 SELECT url FROM reviews_photo WHERE review_id = %s
@@ -556,7 +601,7 @@ async def get_followed_reviews(user_id: int, limit: Optional[int] = None, offset
             cursor.execute(query_photos, (review_id,))
             rows_photos = cursor.fetchall()
             review_photos = [row_photo[0] for row_photo in rows_photos]
-            
+
             # Получаем количество лайков и дизлайков
             query_ranks = sql.SQL("""
                 SELECT 
@@ -569,7 +614,7 @@ async def get_followed_reviews(user_id: int, limit: Optional[int] = None, offset
             ranks_row = cursor.fetchone()
             like_count = ranks_row[0] if ranks_row else 0
             dislike_count = ranks_row[1] if ranks_row else 0
-            
+
             review = {
                 "id": review_id,
                 "id_user": row[1],
@@ -582,7 +627,7 @@ async def get_followed_reviews(user_id: int, limit: Optional[int] = None, offset
                 "dislike": dislike_count,
             }
             reviews.append(review)
-        
+
         return reviews
 
     except (Exception, psycopg2.DatabaseError) as error:
@@ -594,3 +639,50 @@ async def get_followed_reviews(user_id: int, limit: Optional[int] = None, offset
             connection.close()
             logger.info('Database connection closed.')
 
+
+async def get_leaderboard() -> list:
+    connection = db_connection()
+    cursor = connection.cursor()
+
+    try:
+        query = sql.SQL("""
+                SELECT 
+                    id, name, rating
+                    FROM users WHERE isbanned = false
+                    order by rating;
+            """)
+        cursor.execute(query,)
+
+        rows = cursor.fetchall()
+        users = []
+
+        for row in rows:
+            user_id = row[0]
+
+            # Получаем фото для этого отзыва
+            query_photos = sql.SQL("""
+                    SELECT url FROM users_photos WHERE user_id = %s ORDER BY id DESC LIMIT 1
+                """)
+            cursor.execute(query_photos, (user_id,))
+            row_photo = cursor.fetchone()
+            user_photos = row_photo[0] if row_photo else None
+
+
+            user = {
+                "id": user_id,
+                "user_name": row[1],
+                "rating": row[2],
+                "user_photos": user_photos,
+            }
+            users.append(user)
+
+        return users
+
+    except (Exception, psycopg2.DatabaseError) as error:
+        logger.error(error)
+        return []
+    finally:
+        if connection:
+            cursor.close()
+            connection.close()
+            logger.info('Database connection closed.')

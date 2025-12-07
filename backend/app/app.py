@@ -15,7 +15,7 @@ from db.user import create_user, login_user, add_review, get_all_users, get_user
 from db.user import create_user, login_user, add_review, get_all_users, get_user_by_id, delete_review, set_review_rank, add_follow, get_followed_reviews
 from s3_client import upload_photo
 from db.map import get_all_places, add_place, get_all_types, get_place
-from db.user import create_user, login_user, add_review, get_all_users, get_user_by_id, delete_review
+from db.user import create_user, login_user, add_review, get_all_users, get_user_by_id, delete_review, get_leaderboard
 from db.admin import create_admin, login_admin, update_user_rating, verify_place, ban_user, delete_review_admin
 
 
@@ -94,27 +94,12 @@ class reviewData(BaseModel):
 
 
 class placeData(BaseModel):
+    id_user: int
     name: Optional[str] = None
     info: Optional[str] = None
     coord1: Optional[float] = None
     coord2: Optional[float] = None
     type: Optional[int] = None
-    food_type: Optional[int] = None
-    is_alcohol: Optional[bool] = False
-    is_health: Optional[bool] = False
-    is_insurance: Optional[bool] = False
-    is_nosmoking: Optional[bool] = False
-    is_smoke: Optional[bool] = False
-    rating: Optional[int] = None
-    sport_type: Optional[int] = None
-    products: Optional[list[productData]] = None
-    equipment: Optional[list[equipmentData]] = None
-    ads: Optional[list[equipmentData]] = None
-    photos: Optional[List[str]] = None
-
-
-class placeUpdateData(BaseModel):
-    info: Optional[str] = None
     food_type: Optional[int] = None
     is_alcohol: Optional[bool] = None
     is_health: Optional[bool] = None
@@ -125,7 +110,7 @@ class placeUpdateData(BaseModel):
     sport_type: Optional[int] = None
     products: Optional[list[productData]] = None
     equipment: Optional[list[equipmentData]] = None
-    ads: Optional[list[adsData]] = None
+    ads: Optional[list[equipmentData]] = None
     photos: Optional[List[str]] = None
 
 
@@ -591,3 +576,28 @@ async def delete_review_admin_h(data: AdminDeleteReviewData) -> dict:
 
 
 app.include_router(admin_router, prefix="/admin", tags=["admin"])
+
+
+
+leader_router = APIRouter()
+
+
+@leader_router.get("/")
+async def get_leaderboard_h():
+    """Устанавливает лайк или дизлайк на отзыв"""
+    try:
+        # Проверяем, что передан хотя бы один параметр
+
+        result = await get_leaderboard()
+        if not result:
+            logger.error(f"Failed to get leaderboard")
+            raise HTTPException(status_code=400, detail="error")
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in set_review_rank_h: {e}")
+        raise HTTPException(status_code=400, detail=f"error: {str(e)}")
+
+
+app.include_router(leader_router, prefix="/leaderboard", tags=["leaderboard"])

@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import BottomNav from "../components/BottomNav";
 import AuthModal from "../components/AuthModal";
-import { FiSettings, FiStar, FiThumbsUp, FiUsers, FiChevronRight, FiLogIn, FiAward, FiLogOut, FiEdit, FiThumbsDown } from "react-icons/fi";
+import { FiSettings, FiStar, FiThumbsUp, FiUsers, FiChevronRight, FiLogIn, FiAward, FiLogOut, FiThumbsDown } from "react-icons/fi";
 import { api } from "../api";
 
 interface UserData {
@@ -34,6 +34,7 @@ const ProfilePage = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState<UserData | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [editName, setEditName] = useState('');
@@ -58,11 +59,15 @@ const ProfilePage = () => {
   const pointsToNextLevel = 500;
 
   useEffect(() => {
-    const userId = localStorage.getItem('userId');
-    if (userId) {
-      setIsLoggedIn(true);
-      fetchUser(userId);
-    }
+    const checkAuth = async () => {
+      const userId = localStorage.getItem('userId');
+      if (userId) {
+        setIsLoggedIn(true);
+        await fetchUser(userId);
+      }
+      setIsLoading(false);
+    };
+    checkAuth();
   }, []);
 
   const fetchUser = async (userId: string) => {
@@ -123,9 +128,17 @@ const ProfilePage = () => {
     );
   };
 
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
   if (showSettings && user) {
     return (
-      <div className="min-h-screen bg-gray-50 pb-20">
+      <div className="min-h-screen bg-gray-50 pb-20 md:pb-0">
         <header className="bg-white px-4 py-3 flex items-center justify-between border-b sticky top-0 z-10">
           <button onClick={() => setShowSettings(false)} className="text-blue-600">Отмена</button>
           <h1 className="text-lg font-semibold">Настройки</h1>
@@ -134,7 +147,7 @@ const ProfilePage = () => {
           </button>
         </header>
 
-        <div className="p-4 space-y-4">
+        <div className="p-4 space-y-4 max-w-lg mx-auto">
           <div className="bg-white rounded-2xl p-4 space-y-4">
             <div>
               <label className="block text-sm text-gray-500 mb-1">Имя</label>
@@ -181,7 +194,7 @@ const ProfilePage = () => {
 
   if (!isLoggedIn) {
     return (
-      <div className="min-h-screen bg-gray-50 pb-20">
+      <div className="min-h-screen bg-gray-50 pb-20 md:pb-0">
         <header className="bg-white px-4 py-3 flex items-center justify-between border-b sticky top-0 z-10">
           <div className="w-10"></div>
           <h1 className="text-lg font-semibold">Профиль</h1>
@@ -214,7 +227,7 @@ const ProfilePage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-20">
+    <div className="min-h-screen bg-gray-50 pb-20 md:pb-0">
       <header className="bg-white px-4 py-3 flex items-center justify-between border-b sticky top-0 z-10">
         <button className="p-2 hover:bg-gray-100 rounded-full">
           <FiUsers className="w-6 h-6" />
@@ -225,7 +238,7 @@ const ProfilePage = () => {
         </button>
       </header>
 
-      <div className="p-4">
+      <div className="p-4 max-w-lg mx-auto">
         <div className="bg-white rounded-2xl p-4 mb-4">
           <div className="flex items-start gap-4">
             <div className="w-20 h-20 bg-blue-100 rounded-2xl flex items-center justify-center overflow-hidden">

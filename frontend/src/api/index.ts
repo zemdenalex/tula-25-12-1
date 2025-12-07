@@ -6,10 +6,8 @@ import type {
   AdminVerifyPlaceData, AdminDeleteReviewData
 } from '../types';
 
-export const API_BASE = import.meta.env.DEV ? '/api' : 'http://85.198.80.80:8000/api';
-
-const api = axios.create({
-  baseURL: API_BASE,
+export const api = axios.create({
+  baseURL: 'http://85.198.80.80:8000/api',
   headers: {
     'Content-Type': 'application/json',
   },

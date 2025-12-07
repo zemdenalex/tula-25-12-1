@@ -1,6 +1,3 @@
-"""
-Миграции
-"""
 import psycopg2
 from psycopg2 import sql
 
@@ -37,7 +34,7 @@ CREATE TABLE IF NOT EXISTS places (
     isHealth bool default false,
     info varchar,
     isNoSmoking bool default false,
-    isInsurence bool default false, --страхование какое то не помню
+    isInsurence bool default false,
     rating int,
     creatAt timestamp,
     creatorId int,
@@ -163,48 +160,7 @@ CREATE TABLE IF NOT EXISTS follow (
 );
 
 """)
-
         cur.execute(create)
-        
-        # Добавляем поля phone и photo к существующей таблице users, если их нет
-        try:
-            cur.execute("""
-                DO $$ 
-                BEGIN
-                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
-                                   WHERE table_name='users' AND column_name='phone') THEN
-                        ALTER TABLE users ADD COLUMN phone varchar;
-                    END IF;
-                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
-                                   WHERE table_name='users' AND column_name='photo') THEN
-                        ALTER TABLE users ADD COLUMN photo varchar;
-                    END IF;
-                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
-                                   WHERE table_name='reviews' AND column_name='rating') THEN
-                        ALTER TABLE reviews ADD COLUMN rating int;
-                    END IF;
-                    IF NOT EXISTS (SELECT 1 FROM information_schema.tables 
-                                   WHERE table_name='places_photos') THEN
-                        CREATE TABLE places_photos (
-                            id serial PRIMARY KEY,
-                            place_id int,
-                            url varchar
-                        );
-                    END IF;
-                    IF NOT EXISTS (SELECT 1 FROM information_schema.tables 
-                                   WHERE table_name='users_photos') THEN
-                        CREATE TABLE users_photos (
-                            id serial PRIMARY KEY,
-                            user_id int,
-                            url varchar
-                        );
-                    END IF;
-                END $$;
-            """)
-        except Exception as e:
-            # Игнорируем ошибки, если поля уже существуют
-            pass
-        
         conn.commit()
     except (Exception, psycopg2.DatabaseError) as error:
         return error
@@ -230,9 +186,6 @@ def migration_down():
         if conn:
             cur.close()
             conn.close()
-
-
-
 
 
 if __name__ == "__main__":

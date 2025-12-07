@@ -159,7 +159,7 @@ async def get_all_users(limit: Optional[int] = None, offset: Optional[int] = Non
 
         if limit is not None:
             if offset is not None and page is not None:
-                calculated_offset = offset
+                calculated_offset = offset * (page - 1)
                 base_query += f" LIMIT {limit} OFFSET {calculated_offset}"
             elif offset is not None:
                 base_query += f" LIMIT {limit} OFFSET {offset}"
@@ -522,7 +522,7 @@ async def get_followed_reviews(user_id: int, limit: Optional[int] = None, offset
 
         if limit is not None:
             if offset is not None and page is not None:
-                calculated_offset = offset
+                calculated_offset = offset * (page - 1)
                 base_query += f" LIMIT {limit} OFFSET {calculated_offset}"
             elif offset is not None:
                 base_query += f" LIMIT {limit} OFFSET {offset}"

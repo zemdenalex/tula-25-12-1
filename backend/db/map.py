@@ -54,10 +54,9 @@ LEFT JOIN food_type ft ON p.foodtype = ft.id
 LEFT JOIN sport_type st ON st.id = p.sporttype
         """
 
-        # Добавляем LIMIT и OFFSET
         if limit is not None:
             if offset is not None and page is not None:
-                calculated_offset = offset
+                calculated_offset = offset * (page - 1)
                 query += f" LIMIT {limit} OFFSET {calculated_offset}"
             elif offset is not None:
                 query += f" LIMIT {limit} OFFSET {offset}"
@@ -779,10 +778,9 @@ LEFT JOIN sport_type st ON st.id = p.sporttype
         if conditions:
             base_query += " WHERE " + " AND ".join(conditions)
 
-        # Добавляем LIMIT и OFFSET
         if limit is not None:
             if offset is not None and page is not None:
-                calculated_offset = offset
+                calculated_offset = offset * (page - 1)
                 base_query += f" LIMIT {limit} OFFSET {calculated_offset}"
             elif offset is not None:
                 base_query += f" LIMIT {limit} OFFSET {offset}"

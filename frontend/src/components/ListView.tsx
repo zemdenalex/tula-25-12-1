@@ -1,130 +1,108 @@
-import { useState, useMemo } from 'react';
-import { Search, Star, MapPin } from 'lucide-react';
-import { useStore } from '../store';
-import type { Place } from '../types';
+import React from 'react';
+import { Place } from '../store';
+import { StarIcon, MapPinIcon } from '@heroicons/react/24/solid';
+import { HeartIcon } from '@heroicons/react/24/outline';
 
-function PlaceCard({ place, onClick }: { place: Place; onClick: () => void }) {
-  const getEmoji = () => {
-    const placeType = place.type?.toLowerCase() || '';
-    if (placeType.includes('медицин') || placeType.includes('аптек')) return '🏥';
-    if (placeType.includes('спорт') || placeType.includes('фитнес')) return '🏋️';
-    if (placeType.includes('магазин') || placeType.includes('торгов')) return '🛒';
-    if (placeType.includes('еда') || placeType.includes('кафе')) return '🍽️';
-    if (placeType.includes('транспорт')) return '🚌';
-    if (placeType.includes('промышлен')) return '🏭';
-    if (place.is_health) return '💚';
-    return '📍';
-  };
+interface ListViewProps {
+  places: Place[];
+  onPlaceSelect: (place: Place) => void;
+}
 
-  // User rating (1-5 stars)
-  const userRating = place.review_rank || 0;
-  const healthScore = place.rating || 0;
+const ListView: React.FC<ListViewProps> = ({ places, onPlaceSelect }) => {
+  if (places.length === 0) {
+    return (
+      <div className="h-full flex items-center justify-center bg-gray-50 pt-20">
+        <div className="text-center">
+          <MapPinIcon className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+          <p className="text-gray-500 text-lg">Места не найдены</p>
+          <p className="text-gray-400 text-sm mt-1">Попробуйте изменить фильтры</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-full overflow-y-auto bg-gray-50 pt-20 pb-4 px-4">
+      <div className="max-w-2xl mx-auto space-y-3">
+        {places.map((place) => (
+          <PlaceCard key={place.id} place={place} onClick={() => onPlaceSelect(place)} />
+        ))}
+      </div>
+    </div>
+  );
+};
+
+interface PlaceCardProps {
+  place: Place;
+  onClick: () => void;
+}
+
+const PlaceCard: React.FC<PlaceCardProps> = ({ place, onClick }) => {
+  const rating = place.review_rank || place.rating || 0;
+  const reviewCount = place.reviews?.length || 0;
 
   return (
     <button
       onClick={onClick}
-      className="w-full card p-4 text-left hover:shadow-md transition-shadow"
+      className="w-full bg-white rounded-xl p-4 shadow-sm border border-gray-100 hover:border-blue-200 hover:shadow-md transition-all text-left"
     >
       <div className="flex gap-4">
-        <div className="w-14 h-14 bg-gray-100 rounded-xl flex items-center justify-center text-2xl flex-shrink-0">
-          {getEmoji()}
+        {/* Placeholder image */}
+        <div className="w-20 h-20 bg-gray-100 rounded-lg flex-shrink-0 flex items-center justify-center">
+          <MapPinIcon className="w-8 h-8 text-gray-300" />
         </div>
+
         <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-2">
-            <div className="flex-1 min-w-0">
-              <h3 className="font-medium text-gray-900 truncate">
-                {place.name || 'Без названия'}
-              </h3>
-              <p className="text-sm text-gray-500 truncate">
-                {place.type || 'Тип не указан'}
-              </p>
-            </div>
-            {healthScore > 0 && (
-              <div className={`tag text-xs ${healthScore >= 70 ? 'tag-green' : healthScore >= 40 ? 'tag-yellow' : 'tag-red'}`}>
-                {healthScore}%
-              </div>
-            )}
-          </div>
+          <h3 className="font-semibold text-gray-900 truncate">
+            {place.name || 'Без названия'}
+          </h3>
           
-          <div className="flex items-center gap-3 mt-2">
-            {userRating > 0 && (
-              <div className="flex items-center gap-1">
-                <Star size={14} className="text-yellow-400 fill-yellow-400" />
-                <span className="text-sm text-gray-600">{userRating.toFixed(1)}</span>
-              </div>
-            )}
-            {place.reviews?.length > 0 && (
-              <span className="text-sm text-gray-400">
-                {place.reviews.length} отзыв{place.reviews.length > 1 ? (place.reviews.length < 5 ? 'а' : 'ов') : ''}
+          {/* Rating */}
+          <div className="flex items-center gap-1 mt-1">
+            <div className="flex">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <StarIcon
+                  key={star}
+                  className={`w-4 h-4 ${
+                    star <= rating ? 'text-amber-400' : 'text-gray-200'
+                  }`}
+                />
+              ))}
+            </div>
+            <span className="text-sm text-gray-500">
+              {rating > 0 ? rating.toFixed(1) : '—'} ({reviewCount} отзывов)
+            </span>
+          </div>
+
+          {/* Tags */}
+          <div className="flex flex-wrap gap-1 mt-2">
+            {place.type && (
+              <span className="px-2 py-0.5 bg-blue-50 text-blue-700 text-xs rounded-full">
+                {place.type}
               </span>
             )}
-            {place.distance_to_center && (
-              <div className="flex items-center gap-1 text-sm text-gray-400">
-                <MapPin size={12} />
-                {place.distance_to_center.toFixed(1)} км
-              </div>
+            {place.is_health && (
+              <span className="px-2 py-0.5 bg-green-50 text-green-700 text-xs rounded-full">
+                Полезное место
+              </span>
+            )}
+            {place.is_nosmoking && (
+              <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full">
+                Без курения
+              </span>
             )}
           </div>
+
+          {/* Description preview */}
+          {place.info && (
+            <p className="text-sm text-gray-500 mt-2 line-clamp-1">
+              {place.info}
+            </p>
+          )}
         </div>
       </div>
     </button>
   );
-}
+};
 
-export default function ListView() {
-  const { places, setSelectedPlace } = useStore();
-  const [searchQuery, setSearchQuery] = useState('');
-
-  const filteredPlaces = useMemo(() => {
-    if (!searchQuery.trim()) return places;
-    
-    const query = searchQuery.toLowerCase();
-    return places.filter(place => 
-      place.name?.toLowerCase().includes(query) ||
-      place.type?.toLowerCase().includes(query) ||
-      place.info?.toLowerCase().includes(query)
-    );
-  }, [places, searchQuery]);
-
-  return (
-    <div className="h-full flex flex-col bg-gray-50">
-      {/* Search */}
-      <div className="p-4 bg-white border-b border-gray-200">
-        <div className="relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Поиск по названию или типу..."
-            className="input-field pl-12"
-          />
-        </div>
-      </div>
-
-      {/* Results count */}
-      <div className="px-4 py-2 text-sm text-gray-500">
-        Найдено: {filteredPlaces.length} объектов
-      </div>
-
-      {/* Places list */}
-      <div className="flex-1 overflow-y-auto px-4 pb-4">
-        <div className="space-y-3">
-          {filteredPlaces.length === 0 ? (
-            <div className="text-center py-12 text-gray-500">
-              {searchQuery ? 'Ничего не найдено' : 'Нет объектов для отображения'}
-            </div>
-          ) : (
-            filteredPlaces.map((place) => (
-              <PlaceCard
-                key={place.id}
-                place={place}
-                onClick={() => setSelectedPlace(place)}
-              />
-            ))
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
+export default ListView;

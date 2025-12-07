@@ -1,140 +1,114 @@
-import { useEffect, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
+import React, { useEffect, useRef } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
-import 'leaflet.markercluster';
-import { Plus } from 'lucide-react';
-import { useStore } from '../store';
-import type { Place } from '../types';
+import 'leaflet/dist/leaflet.css';
+import { Place } from '../store';
 
-// Tula center coordinates
-const TULA_CENTER: [number, number] = [54.193122, 37.617348];
+// Fix for default markers
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+});
 
-function getMarkerIcon(place: Place): L.DivIcon {
-  let emoji = '📍';
-  let colorClass = 'neutral';
+// Custom marker icon
+const createCustomIcon = (isSelected: boolean, isHealth: boolean) => {
+  const color = isHealth ? '#10B981' : '#4A6CF7';
+  const size = isSelected ? 40 : 32;
   
-  const placeType = place.type?.toLowerCase() || '';
-  
-  if (placeType.includes('медицин') || placeType.includes('аптек')) {
-    emoji = '🏥';
-    colorClass = 'positive';
-  } else if (placeType.includes('спорт') || placeType.includes('фитнес')) {
-    emoji = '🏋️';
-    colorClass = 'positive';
-  } else if (placeType.includes('магазин') || placeType.includes('торгов')) {
-    emoji = '🛒';
-    colorClass = place.is_health ? 'positive' : place.is_alcohol ? 'negative' : 'neutral';
-  } else if (placeType.includes('еда') || placeType.includes('кафе') || placeType.includes('ресторан')) {
-    emoji = '🍽️';
-    colorClass = place.is_health ? 'positive' : 'neutral';
-  } else if (placeType.includes('транспорт') || placeType.includes('остановк')) {
-    emoji = '🚌';
-    colorClass = 'neutral';
-  } else if (placeType.includes('промышлен') || placeType.includes('завод')) {
-    emoji = '🏭';
-    colorClass = 'negative';
-  } else if (placeType.includes('отход') || placeType.includes('мусор')) {
-    emoji = '🗑️';
-    colorClass = 'negative';
-  } else if (place.is_health) {
-    emoji = '💚';
-    colorClass = 'positive';
-  } else if (place.is_smoke || place.is_alcohol) {
-    colorClass = 'negative';
-  }
-
   return L.divIcon({
-    className: '',
-    html: `<div class="custom-marker ${colorClass}">${emoji}</div>`,
-    iconSize: [36, 36],
-    iconAnchor: [18, 18],
+    className: 'custom-marker',
+    html: `
+      <div style="
+        width: ${size}px;
+        height: ${size}px;
+        background-color: ${color};
+        border: 3px solid white;
+        border-radius: 50% 50% 50% 0;
+        transform: rotate(-45deg);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        ${isSelected ? 'transform: rotate(-45deg) scale(1.2);' : ''}
+      "></div>
+    `,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size],
+    popupAnchor: [0, -size],
   });
+};
+
+interface MapViewProps {
+  places: Place[];
+  onPlaceSelect: (place: Place) => void;
+  selectedPlace: Place | null;
 }
 
-function MarkerClusterLayer({ places }: { places: Place[] }) {
+// Component to handle map center updates
+const MapController: React.FC<{ center: [number, number]; selectedPlace: Place | null }> = ({ center, selectedPlace }) => {
   const map = useMap();
-  const clusterRef = useRef<L.MarkerClusterGroup | null>(null);
-  const { setSelectedPlace } = useStore();
-
+  
   useEffect(() => {
-    if (!map) return;
-
-    // Remove existing cluster
-    if (clusterRef.current) {
-      map.removeLayer(clusterRef.current);
+    if (selectedPlace) {
+      map.setView([selectedPlace.coord1, selectedPlace.coord2], 16, { animate: true });
     }
-
-    // Create new cluster group
-    const cluster = L.markerClusterGroup({
-      maxClusterRadius: 50,
-      spiderfyOnMaxZoom: true,
-      showCoverageOnHover: false,
-      chunkedLoading: true,
-      animate: true,
-    });
-
-    // Add markers to cluster
-    places.forEach((place) => {
-      if (place.coord1 && place.coord2) {
-        const marker = L.marker([place.coord1, place.coord2], {
-          icon: getMarkerIcon(place),
-        });
-
-        marker.on('click', () => {
-          setSelectedPlace(place);
-        });
-
-        cluster.addLayer(marker);
-      }
-    });
-
-    map.addLayer(cluster);
-    clusterRef.current = cluster;
-
-    return () => {
-      if (clusterRef.current) {
-        map.removeLayer(clusterRef.current);
-      }
-    };
-  }, [map, places, setSelectedPlace]);
+  }, [selectedPlace, map]);
 
   return null;
-}
+};
 
-export default function MapView() {
-  const { places, user, setAuthModalOpen } = useStore();
-
-  const handleAddPlace = () => {
-    if (!user) {
-      setAuthModalOpen(true);
-      return;
-    }
-    // TODO: Implement add place modal
-    alert('Добавление объекта будет доступно в следующей версии');
-  };
-
+const MapView: React.FC<MapViewProps> = ({ places, onPlaceSelect, selectedPlace }) => {
+  // Default center - Tula, Russia
+  const defaultCenter: [number, number] = [54.193122, 37.617348];
+  
   return (
-    <div className="relative w-full h-full">
-      <MapContainer
-        center={TULA_CENTER}
-        zoom={13}
-        className="w-full h-full"
-        zoomControl={false}
-      >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
-        <MarkerClusterLayer places={places} />
-      </MapContainer>
-
-      {/* FAB for adding places */}
-      <button
-        onClick={handleAddPlace}
-        className="absolute bottom-6 right-6 w-14 h-14 bg-primary-500 text-white rounded-full shadow-lg flex items-center justify-center hover:bg-primary-600 transition-colors z-[1000]"
-      >
-        <Plus size={24} />
-      </button>
-    </div>
+    <MapContainer
+      center={defaultCenter}
+      zoom={13}
+      className="h-full w-full"
+      zoomControl={false}
+    >
+      <TileLayer
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+      />
+      
+      <MapController center={defaultCenter} selectedPlace={selectedPlace} />
+      
+      {places.map((place) => (
+        <Marker
+          key={place.id}
+          position={[place.coord1, place.coord2]}
+          icon={createCustomIcon(
+            selectedPlace?.id === place.id,
+            place.is_health || false
+          )}
+          eventHandlers={{
+            click: () => onPlaceSelect(place),
+          }}
+        >
+          <Popup>
+            <div className="p-2 min-w-[200px]">
+              <h3 className="font-bold text-gray-900">{place.name || 'Без названия'}</h3>
+              {place.type && (
+                <span className="inline-block mt-1 px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">
+                  {place.type}
+                </span>
+              )}
+              {place.info && (
+                <p className="text-sm text-gray-600 mt-2 line-clamp-2">{place.info}</p>
+              )}
+              <button
+                onClick={() => onPlaceSelect(place)}
+                className="mt-2 w-full py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors"
+              >
+                Подробнее
+              </button>
+            </div>
+          </Popup>
+        </Marker>
+      ))}
+    </MapContainer>
   );
-}
+};
+
+export default MapView;

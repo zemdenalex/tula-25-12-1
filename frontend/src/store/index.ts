@@ -1,148 +1,459 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
-import type { Place, User, PlaceTypes, SearchFilters, ViewMode } from '../types';
-import { placesApi, usersApi } from '../api';
+import axios from 'axios';
+
+// API Base URL - use environment variable or default to remote server
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://85.198.80.80:8000/api';
+
+const api = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: 60000, // Increase to 60 seconds for large datasets
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// Types based on OpenAPI spec
+export interface Product {
+  id?: number | null;
+  type?: string | null;
+  name: string;
+  min_cost?: number | null;
+  is_health?: boolean | null;
+  is_alcohol?: boolean | null;
+  is_smoking?: boolean | null;
+}
+
+export interface Equipment {
+  name?: string | null;
+  count?: number | null;
+  type?: number | null;
+}
+
+export interface Ads {
+  id?: number | null;
+  type?: string | null;
+  name: string;
+  is_health?: boolean | null;
+}
+
+export interface Review {
+  id?: number | null;
+  id_user?: number | null;
+  user_name?: string | null;
+  id_place?: number | null;
+  text?: string | null;
+  review_photos: string[];
+  like?: number | null;
+  dislike?: number | null;
+}
+
+export interface Place {
+  id?: number | null;
+  name?: string | null;
+  info?: string | null;
+  coord1: number;
+  coord2: number;
+  type?: string | null;
+  food_type?: string | null;
+  is_alcohol?: boolean | null;
+  is_health?: boolean | null;
+  is_insurance?: boolean | null;
+  is_nosmoking?: boolean | null;
+  is_smoke?: boolean | null;
+  rating?: number | null;
+  sport_type?: string | null;
+  distance_to_center?: number | null;
+  is_moderated?: boolean | null;
+  review_rank?: number | null;
+  products: Product[];
+  equipment: Equipment[];
+  ads: Ads[];
+  reviews: Review[];
+}
+
+export interface User {
+  user_id: number;
+  name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  photo?: string | null;
+  rating?: number | null;
+}
+
+export interface PlaceFilters {
+  place_type?: number | null;
+  is_alcohol?: boolean | null;
+  is_health?: boolean | null;
+  is_nosmoking?: boolean | null;
+  is_smoke?: boolean | null;
+  max_distance?: number | null;
+  is_moderated?: boolean | null;
+  has_product_type?: number[] | null;
+  has_equipment_type?: number[] | null;
+  has_ads_type?: number[] | null;
+  minRating?: number | null;
+}
+
+export type ViewMode = 'map' | 'list';
 
 interface AppState {
-  // Data
+  // Places
   places: Place[];
   selectedPlace: Place | null;
-  placeTypes: PlaceTypes | null;
+  isLoadingPlaces: boolean;
+  placesError: string | null;
+  
+  // User
   user: User | null;
-  userId: number | null;
+  isAuthenticated: boolean;
+  authError: string | null;
+  
+  // Users list (for leaderboard)
+  users: User[];
+  isLoadingUsers: boolean;
   
   // UI state
   viewMode: ViewMode;
-  filters: SearchFilters;
-  isLoading: boolean;
-  isBottomSheetOpen: boolean;
-  isReviewFormOpen: boolean;
-  isAuthModalOpen: boolean;
-  isFilterModalOpen: boolean;
-  isAddPlaceModalOpen: boolean;
-
-  // Actions
-  setPlaces: (places: Place[]) => void;
-  setSelectedPlace: (place: Place | null) => void;
-  setPlaceTypes: (types: PlaceTypes) => void;
-  setUser: (user: User | null) => void;
-  setUserId: (id: number | null) => void;
-  setViewMode: (mode: ViewMode) => void;
-  setFilters: (filters: SearchFilters) => void;
-  setIsLoading: (loading: boolean) => void;
-  setBottomSheetOpen: (open: boolean) => void;
-  setReviewFormOpen: (open: boolean) => void;
-  setAuthModalOpen: (open: boolean) => void;
-  setFilterModalOpen: (open: boolean) => void;
-  setAddPlaceModalOpen: (open: boolean) => void;
-
-  // Async actions
+  filterModalOpen: boolean;
+  searchQuery: string;
+  filters: PlaceFilters;
+  
+  // Actions - Places
   fetchPlaces: () => Promise<void>;
-  fetchPlaceTypes: () => Promise<void>;
-  fetchUserById: (id: number) => Promise<void>;
-  searchPlaces: (filters: SearchFilters) => Promise<void>;
-  refreshSelectedPlace: () => Promise<void>;
+  fetchPlacesWithFilters: (filters: PlaceFilters) => Promise<void>;
+  fetchPlaceById: (id: number) => Promise<Place | null>;
+  setSelectedPlace: (place: Place | null) => void;
+  addPlace: (data: {
+    name: string;
+    info?: string;
+    coord1: number;
+    coord2: number;
+    type?: number;
+    is_alcohol?: boolean;
+    is_health?: boolean;
+    is_nosmoking?: boolean;
+    is_smoke?: boolean;
+  }) => Promise<number | null>;
+  updatePlace: (id: number, data: any) => Promise<boolean>;
+  
+  // Actions - Auth
+  login: (email: string, password: string) => Promise<boolean>;
+  register: (name: string, email: string, password: string) => Promise<boolean>;
   logout: () => void;
+  
+  // Actions - Users
+  fetchUsers: () => Promise<void>;
+  fetchUserById: (id: number) => Promise<User | null>;
+  
+  // Actions - Reviews
+  addReview: (data: {
+    message: string;
+    user_id: number;
+    place_id: number;
+    rating: number;
+    photos?: string[];
+  }) => Promise<boolean>;
+  setReviewRank: (userId: number, reviewId: number, like?: boolean, dislike?: boolean) => Promise<boolean>;
+  
+  // Actions - UI
+  setViewMode: (mode: ViewMode) => void;
+  setFilterModalOpen: (open: boolean) => void;
+  setSearchQuery: (query: string) => void;
+  setFilters: (filters: PlaceFilters) => void;
+  clearFilters: () => void;
 }
 
-export const useStore = create<AppState>()(
-  persist(
-    (set, get) => ({
-      // Initial state
-      places: [],
-      selectedPlace: null,
-      placeTypes: null,
-      user: null,
-      userId: null,
-      viewMode: 'map',
-      filters: { is_moderated: false, max_distance: 100 },
-      isLoading: false,
-      isBottomSheetOpen: false,
-      isReviewFormOpen: false,
-      isAuthModalOpen: false,
-      isFilterModalOpen: false,
-      isAddPlaceModalOpen: false,
-
-      // Setters
-      setPlaces: (places) => set({ places }),
-      setSelectedPlace: (place) => set({ selectedPlace: place, isBottomSheetOpen: !!place }),
-      setPlaceTypes: (types) => set({ placeTypes: types }),
-      setUser: (user) => set({ user }),
-      setUserId: (id) => set({ userId: id }),
-      setViewMode: (mode) => set({ viewMode: mode }),
-      setFilters: (filters) => set({ filters }),
-      setIsLoading: (loading) => set({ isLoading: loading }),
-      setBottomSheetOpen: (open) => set({ isBottomSheetOpen: open }),
-      setReviewFormOpen: (open) => set({ isReviewFormOpen: open }),
-      setAuthModalOpen: (open) => set({ isAuthModalOpen: open }),
-      setFilterModalOpen: (open) => set({ isFilterModalOpen: open }),
-      setAddPlaceModalOpen: (open) => set({ isAddPlaceModalOpen: open }),
-
-      // Async actions
-      fetchPlaces: async () => {
-        set({ isLoading: true });
-        try {
-          const places = await placesApi.getAll();
-          set({ places: Array.isArray(places) ? places : [] });
-        } catch (error) {
-          console.error('Failed to fetch places:', error);
-          set({ places: [] });
-        } finally {
-          set({ isLoading: false });
-        }
-      },
-
-      fetchPlaceTypes: async () => {
-        try {
-          const types = await placesApi.getTypes();
-          if (types && typeof types === 'object') {
-            set({ placeTypes: types });
-          }
-        } catch (error) {
-          console.error('Failed to fetch place types:', error);
-        }
-      },
-
-      fetchUserById: async (id: number) => {
-        try {
-          const user = await usersApi.getById(id);
-          set({ user, userId: id });
-        } catch (error) {
-          console.error('Failed to fetch user:', error);
-          set({ user: null, userId: null });
-        }
-      },
-
-      searchPlaces: async (filters: SearchFilters) => {
-        set({ isLoading: true, filters });
-        try {
-          const places = await placesApi.search(filters);
-          set({ places: Array.isArray(places) ? places : [] });
-        } catch (error) {
-          console.error('Failed to search places:', error);
-          set({ places: [] });
-        } finally {
-          set({ isLoading: false });
-        }
-      },
-
-      refreshSelectedPlace: async () => {
-        const { selectedPlace } = get();
-        if (selectedPlace?.id) {
-          try {
-            const place = await placesApi.getById(selectedPlace.id);
-            set({ selectedPlace: place });
-          } catch (error) {
-            console.error('Failed to refresh place:', error);
-          }
-        }
-      },
-
-      logout: () => set({ user: null, userId: null }),
-    }),
-    {
-      name: 'health-map-storage',
-      partialize: (state) => ({ userId: state.userId }),
+export const useStore = create<AppState>((set, get) => ({
+  // Initial state
+  places: [],
+  selectedPlace: null,
+  isLoadingPlaces: false,
+  placesError: null,
+  
+  user: null,
+  isAuthenticated: false,
+  authError: null,
+  
+  users: [],
+  isLoadingUsers: false,
+  
+  // UI state
+  viewMode: 'map',
+  filterModalOpen: false,
+  searchQuery: '',
+  filters: {
+    max_distance: 5,
+    is_moderated: true,
+  },
+  
+    // Place actions
+  fetchPlaces: async () => {
+    // Don't fetch if already loading
+    if (get().isLoadingPlaces) {
+      console.log('Already loading places, skipping...');
+      return;
     }
-  )
-);
+    
+    set({ isLoadingPlaces: true, placesError: null });
+    try {
+      const response = await api.get<Place[]>('/place/');
+      console.log('Fetched places:', response.data?.length || 0);
+      set({ places: response.data || [], isLoadingPlaces: false });
+    } catch (error: any) {
+      console.error('Failed to fetch places:', error);
+      // DON'T overwrite places if we already have data
+      const currentPlaces = get().places;
+      set({ 
+        placesError: error.message || 'Failed to fetch places', 
+        isLoadingPlaces: false,
+        // Keep existing places if we have them
+        places: currentPlaces.length > 0 ? currentPlaces : []
+      });
+    }
+  },
+  
+  fetchPlacesWithFilters: async (filters: PlaceFilters) => {
+    set({ isLoadingPlaces: true, placesError: null });
+    try {
+      const params = new URLSearchParams();
+      
+      if (filters.place_type != null) params.append('place_type', String(filters.place_type));
+      if (filters.is_alcohol != null) params.append('is_alcohol', String(filters.is_alcohol));
+      if (filters.is_health != null) params.append('is_health', String(filters.is_health));
+      if (filters.is_nosmoking != null) params.append('is_nosmoking', String(filters.is_nosmoking));
+      if (filters.is_smoke != null) params.append('is_smoke', String(filters.is_smoke));
+      if (filters.max_distance != null) params.append('max_distance', String(filters.max_distance));
+      if (filters.is_moderated != null) params.append('is_moderated', String(filters.is_moderated));
+      
+      if (filters.has_product_type) {
+        filters.has_product_type.forEach(id => params.append('has_product_type', String(id)));
+      }
+      if (filters.has_equipment_type) {
+        filters.has_equipment_type.forEach(id => params.append('has_equipment_type', String(id)));
+      }
+      if (filters.has_ads_type) {
+        filters.has_ads_type.forEach(id => params.append('has_ads_type', String(id)));
+      }
+      
+      const response = await api.get<Place[]>(`/place/search?${params.toString()}`);
+      set({ places: response.data || [], isLoadingPlaces: false });
+    } catch (error: any) {
+      console.error('Failed to fetch places with filters:', error);
+      set({ 
+        placesError: error.message || 'Failed to fetch places', 
+        isLoadingPlaces: false,
+        places: []
+      });
+    }
+  },
+  
+  fetchPlaceById: async (id: number) => {
+    try {
+      const response = await api.get<Place>(`/place/point/${id}`);
+      return response.data;
+    } catch (error) {
+      console.error('Failed to fetch place:', error);
+      return null;
+    }
+  },
+  
+  setSelectedPlace: (place: Place | null) => {
+    set({ selectedPlace: place });
+  },
+
+  addPlace: async (data) => {
+    try {
+      const response = await api.post<number>('/place/', data);
+      await get().fetchPlaces();
+      return response.data;
+    } catch (error) {
+      console.error('Failed to add place:', error);
+      return null;
+    }
+  },
+  
+  updatePlace: async (id: number, data: any) => {
+    try {
+      await api.post(`/place/change/${id}`, data);
+      await get().fetchPlaces();
+      return true;
+    } catch (error) {
+      console.error('Failed to update place:', error);
+      return false;
+    }
+  },
+  
+  // Auth actions
+  login: async (email: string, password: string) => {
+    set({ authError: null });
+    try {
+      const response = await api.post<{ user_id: number; name?: string; email?: string; rating?: number }>('/user/login', {
+        email,
+        password,
+      });
+      
+      console.log('Login response:', response.data);
+      
+      const userData: User = {
+        user_id: response.data.user_id,
+        name: response.data.name,
+        email: response.data.email,
+        rating: response.data.rating,
+      };
+      
+      set({ user: userData, isAuthenticated: true });
+      localStorage.setItem('user', JSON.stringify(userData));
+      return true;
+    } catch (error: any) {
+      console.error('Login error:', error);
+      const errorMsg = error.response?.data?.detail || 'Неверный email или пароль';
+      set({ authError: errorMsg });
+      return false;
+    }
+  },
+  
+  register: async (name: string, email: string, password: string) => {
+    set({ authError: null });
+    try {
+      const response = await api.post<{ user_id: number }>('/user/create', {
+        name,
+        email,
+        password,
+      });
+      
+      console.log('Register response:', response.data);
+      
+      const userData: User = {
+        user_id: response.data.user_id,
+        name,
+        email,
+      };
+      
+      set({ user: userData, isAuthenticated: true });
+      localStorage.setItem('user', JSON.stringify(userData));
+      return true;
+    } catch (error: any) {
+      console.error('Register error:', error);
+      const errorMsg = error.response?.data?.detail || 'Ошибка регистрации';
+      set({ authError: errorMsg });
+      return false;
+    }
+  },
+  
+  logout: () => {
+    set({ user: null, isAuthenticated: false });
+    localStorage.removeItem('user');
+  },
+  
+  // User actions
+  fetchUsers: async () => {
+    set({ isLoadingUsers: true });
+    try {
+      const response = await api.get<User[]>('/user/');
+      console.log('Fetched users:', response.data);
+      set({ users: response.data || [], isLoadingUsers: false });
+    } catch (error) {
+      console.error('Failed to fetch users:', error);
+      set({ isLoadingUsers: false, users: [] });
+    }
+  },
+  
+  fetchUserById: async (id: number) => {
+    try {
+      const response = await api.get<User>(`/user/${id}`);
+      return response.data;
+    } catch (error) {
+      console.error('Failed to fetch user:', error);
+      return null;
+    }
+  },
+  
+  // Review actions
+  addReview: async (data) => {
+    try {
+      await api.post('/user/review', data);
+      await get().fetchPlaces();
+      return true;
+    } catch (error) {
+      console.error('Failed to add review:', error);
+      return false;
+    }
+  },
+  
+  setReviewRank: async (userId: number, reviewId: number, like?: boolean, dislike?: boolean) => {
+    try {
+      await api.post('/review/rank', {
+        user_id: userId,
+        review_id: reviewId,
+        like: like ?? null,
+        dislike: dislike ?? null,
+      });
+      return true;
+    } catch (error) {
+      console.error('Failed to set review rank:', error);
+      return false;
+    }
+  },
+  
+  // UI actions
+  setViewMode: (mode: ViewMode) => {
+    set({ viewMode: mode });
+  },
+  
+  setFilterModalOpen: (open: boolean) => {
+    set({ filterModalOpen: open });
+  },
+  
+  setSearchQuery: (query: string) => {
+    set({ searchQuery: query });
+  },
+  
+  setFilters: (filters: PlaceFilters) => {
+    set({ filters: { ...get().filters, ...filters } });
+  },
+  
+  clearFilters: () => {
+    set({ 
+      filters: {
+        max_distance: 5,
+        is_moderated: true,
+      }
+    });
+  },
+}));
+
+// Photo upload function (separate from store due to FormData)
+export const uploadPhoto = async (file: File): Promise<string | null> => {
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    const response = await fetch(`${API_BASE_URL}/photo/upload`, {
+      method: 'POST',
+      body: formData,
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.text();
+      console.error('Photo upload failed:', response.status, errorData);
+      throw new Error(`Upload failed: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    return data.url || data;
+  } catch (error) {
+    console.error('Failed to upload photo:', error);
+    return null;
+  }
+};
+
+// Initialize user from localStorage
+const savedUser = localStorage.getItem('user');
+if (savedUser) {
+  try {
+    const userData = JSON.parse(savedUser);
+    useStore.setState({ user: userData, isAuthenticated: true });
+  } catch (e) {
+    localStorage.removeItem('user');
+  }
+}

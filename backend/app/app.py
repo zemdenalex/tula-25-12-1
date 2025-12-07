@@ -24,17 +24,18 @@ logger = logging.getLogger(__name__)
 app = FastAPI(root_path="/api")
 
 origins = [
-    "http://localhost.tiangolo.com",
-    "https://localhost.tiangolo.com",
-    "http://localhost",
-    "http://localhost:8080",
-    "http://localhost:80",
-    "http://localhost:443",
-    "http://localhost:5173",
-    "http://localhost:5174",
-    "http://localhost:4173",
-    "http://localhost:3000",
-    "https://localhost:8000",
+    "*",
+#     "http://localhost.tiangolo.com",
+#     "https://localhost.tiangolo.com",
+#     "http://localhost",
+#     "http://localhost:8080",
+#     "http://localhost:80",
+#     "http://localhost:443",
+#     "http://localhost:5173",
+#     "http://localhost:5174",
+#     "http://localhost:4173",
+#     "http://localhost:3000",
+#     "https://localhost:8000",
 ]
 
 app.add_middleware(

@@ -479,13 +479,13 @@ async def upload_photo_h(request: FastAPIRequest):
 
         photo_url = upload_photo(file_data, file_extension)
 
-        moderation = moderate_image_by_url(photo_url)
+        # moderation = moderate_image_by_url(photo_url)
 
-        if moderation not in [1, 2]:
-            return HTTPException(status_code=402, detail="Photo upload failed")
+        # if moderation not in [1, 2]:
+        #     return HTTPException(status_code=402, detail="Photo upload failed")
 
-        if moderation == 1:
-            return HTTPException(status_code=401, detail="Photo not moderation")
+        # if moderation == 1:
+        #     return HTTPException(status_code=401, detail="Photo not moderation")
 
         return {"url": photo_url}
     except HTTPException:

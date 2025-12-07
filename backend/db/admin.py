@@ -1,13 +1,10 @@
-"""
-Модуль для работы с администраторами
-Использует структуру БД из migration.py
-"""
 import hashlib
-import psycopg2
-from psycopg2 import sql
 import logging
 from datetime import datetime
 from typing import Optional
+
+import psycopg2
+from psycopg2 import sql
 
 from db.migration import db_connection
 
@@ -23,33 +20,26 @@ logging.basicConfig(
 
 
 def hash_password(password: str) -> str:
-    """Хеширует пароль"""
     return hashlib.sha256(password.encode()).hexdigest()
 
 
 async def create_admin(id_invite: int, name: str, email: str, password: str) -> int:
-    """Создает нового админа. Возвращает id нового админа или None при ошибке"""
     connection = db_connection()
     cursor = connection.cursor()
 
     try:
-        # Проверяем, что приглашающий админ существует
         check_invite_query = sql.SQL("SELECT id FROM admins WHERE id = %s")
         cursor.execute(check_invite_query, (id_invite,))
         if not cursor.fetchone():
-            return None  # Приглашающий админ не найден
+            return None
 
-        # Проверяем, существует ли админ с таким email
         check_email_query = sql.SQL("SELECT id FROM admins WHERE email = %s")
         cursor.execute(check_email_query, (email,))
         if cursor.fetchone():
-            return None  # Админ с таким email уже существует
+            return None
 
-        # Хешируем пароль
         hashed_password = hash_password(password)
 
-        # Создаем админа
-        # Используем имена полей из migration.py: idAssigned -> idassigned (PostgreSQL приводит к нижнему регистру)
         query = sql.SQL("""
             INSERT INTO admins (idassigned, name, email, password)
             VALUES (%s, %s, %s, %s)
@@ -74,7 +64,6 @@ async def create_admin(id_invite: int, name: str, email: str, password: str) -> 
 
 
 async def login_admin(email: str, password: str) -> int:
-    """Проверяет email и password админа, возвращает admin_id при успехе"""
     connection = db_connection()
     cursor = connection.cursor()
 
@@ -103,12 +92,10 @@ async def login_admin(email: str, password: str) -> int:
 
 
 async def update_user_rating(user_id: int, rating: int) -> bool:
-    """Обновляет рейтинг пользователя. Возвращает True при успехе"""
     connection = db_connection()
     cursor = connection.cursor()
 
     try:
-        # Проверяем, существует ли пользователь
         check_query = sql.SQL("SELECT id, rating FROM users WHERE id = %s")
         cursor.execute(check_query, (user_id,))
         row = cursor.fetchone()
@@ -117,7 +104,6 @@ async def update_user_rating(user_id: int, rating: int) -> bool:
 
         current_rating = row[1] + rating
 
-        # Обновляем рейтинг
         query = sql.SQL("""
             UPDATE users SET rating = %s WHERE id = %s
         """)
@@ -138,18 +124,15 @@ async def update_user_rating(user_id: int, rating: int) -> bool:
 
 
 async def verify_place(place_id: int, verify: bool) -> bool:
-    """Устанавливает флаг верификации места. Возвращает True при успехе"""
     connection = db_connection()
     cursor = connection.cursor()
 
     try:
-        # Проверяем, существует ли место
         check_query = sql.SQL("SELECT id FROM places WHERE id = %s")
         cursor.execute(check_query, (place_id,))
         if not cursor.fetchone():
             return False
 
-        # Обновляем флаг верификации
         query = sql.SQL("""
             UPDATE places SET is_moderated = %s WHERE id = %s
         """)
@@ -170,19 +153,15 @@ async def verify_place(place_id: int, verify: bool) -> bool:
 
 
 async def ban_user(user_id: int) -> bool:
-    """Банит пользователя, устанавливает isBanned=true, bannedAt=текущее время. Возвращает True при успехе"""
     connection = db_connection()
     cursor = connection.cursor()
 
     try:
-        # Проверяем, существует ли пользователь
         check_query = sql.SQL("SELECT id FROM users WHERE id = %s")
         cursor.execute(check_query, (user_id,))
         if not cursor.fetchone():
             return False
 
-        # Баним пользователя
-        # Используем имена полей из migration.py: isBanned -> isbanned, bannedAt -> bannedat
         current_time = datetime.now()
         query = sql.SQL("""
             UPDATE users 
@@ -206,18 +185,10 @@ async def ban_user(user_id: int) -> bool:
 
 
 async def delete_review_admin(review_id: int, rating: Optional[int] = None) -> bool:
-    """
-    Удаляет отзыв админом. 
-    Если указан rating, обновляет рейтинг автора отзыва (пользователя) на это значение.
-    Иначе пересчитывает рейтинг места автоматически.
-    Возвращает True при успехе
-    """
     connection = db_connection()
     cursor = connection.cursor()
 
     try:
-        # Проверяем, существует ли отзыв и получаем idPlace и idUser
-        # Используем имена полей из migration.py: idPlace -> idplace, idUser -> iduser
         check_query = sql.SQL("""
             SELECT idplace, iduser FROM reviews WHERE id = %s
         """)
@@ -225,40 +196,33 @@ async def delete_review_admin(review_id: int, rating: Optional[int] = None) -> b
         
         row = cursor.fetchone()
         if not row:
-            return False  # Отзыв не найден
+            return False
         
         place_id = row[0]
         user_id = row[1]
 
-        # Удаляем отзыв
         delete_query = sql.SQL("""
             DELETE FROM reviews WHERE id = %s
         """)
         cursor.execute(delete_query, (review_id,))
-        
-        # Обновляем рейтинг
+
         if rating is not None:
-            # Получаем старый рейтинг пользователя
             get_rating_query = sql.SQL("""
                 SELECT rating FROM users WHERE id = %s
             """)
             cursor.execute(get_rating_query, (user_id,))
             rating_row = cursor.fetchone()
             if not rating_row:
-                return False  # Пользователь не найден
+                return False
             
             old_rating = rating_row[0]
-            # Вычитаем новый рейтинг из старого
             new_rating = old_rating + rating
-            
-            # Обновляем рейтинг автора отзыва (пользователя)
+
             update_user_rating_query = sql.SQL("""
                 UPDATE users SET rating = %s WHERE id = %s
             """)
             cursor.execute(update_user_rating_query, (new_rating, user_id))
         else:
-            # Пересчитываем рейтинг места автоматически
-            # Используем функцию из map.py через SQL
             update_place_rating_query = sql.SQL("""
                 UPDATE places 
                 SET rating = calculate_health_rating(%s) 

@@ -278,3 +278,39 @@ input[type="range"]::-moz-range-thumb {
     padding-bottom: max(1rem, env(safe-area-inset-bottom));
   }
 }
+<<<<<<< HEAD
+
+input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 8px;
+  border-radius: 4px;
+  outline: none;
+}
+
+input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  background: #3B82F6;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 3px solid white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+input[type='range']::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  background: #3B82F6;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 3px solid white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+=======
+>>>>>>> aa80096d1e1cd0a3c22ab9abec960d40bad68eaa

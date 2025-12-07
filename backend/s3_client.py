@@ -76,6 +76,7 @@ def upload_photo(file_data: bytes, file_extension: str = "jpg") -> str:
         file_name = f"{uuid.uuid4()}.{file_extension}"
         object_name = f"reviews/{file_name}"
         file_stream = BytesIO(file_data)
+        file_size = len(file_data)
         mime_type, _ = mimetypes.guess_type(f"file.{file_extension}")
         if not mime_type:
             mime_type = f"image/{file_extension}"

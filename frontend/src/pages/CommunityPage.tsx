@@ -1,4 +1,104 @@
 import { useState } from 'react';
+<<<<<<< HEAD
+import { useNavigate } from 'react-router-dom';
+import BottomNav from '../components/BottomNav';
+import { FiMessageCircle, FiBell, FiThumbsUp, FiThumbsDown, FiStar, FiX, FiCheck, FiAlertCircle, FiInfo } from 'react-icons/fi';
+
+const CommunityPage = () => {
+  const navigate = useNavigate();
+  const [showNotifications, setShowNotifications] = useState(false);
+
+  const mockReviews = [
+    { id: 1, id_user: 1, user_name: 'Ванечка Иванов', place_name: 'Фитнес-клуб "Атлант"', text: 'Классное место с кучей тренажеров, короче круто', rating: 4, like: 5, dislike: 1, created_at: '24.09.25', user_rating: 1703 },
+    { id: 2, id_user: 2, user_name: 'Мария Петрова', place_name: 'Кафе "Здоровье"', text: 'Отличная еда, большие порции', rating: 5, like: 12, dislike: 0, created_at: '23.09.25', user_rating: 850 },
+  ];
+
+  const mockNotifications = [
+    { id: '1', type: 'warning', title: 'Добавление объекта', message: 'Пожалуйста, перепишете отзыв, адрес не совпадает с действительным расположением' },
+    { id: '2', type: 'info', title: 'Публикация отзыва', message: 'Ваш отзыв был опубликован' },
+    { id: '3', type: 'info', title: 'Публикация отзыва', message: 'Ваш отзыв был опубликован' },
+  ];
+
+  const renderStars = (rating: number) => Array.from({ length: 5 }, (_, i) => (
+    <FiStar key={i} className={`w-4 h-4 ${i < rating ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'}`} />
+  ));
+
+  const getNotificationIcon = (type: string) => {
+    switch (type) {
+      case 'warning': return <FiAlertCircle className="w-5 h-5 text-red-500" />;
+      default: return <FiInfo className="w-5 h-5 text-blue-500" />;
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 pb-20">
+      <div className="bg-white p-4 flex items-center justify-between sticky top-0 z-40">
+        <button onClick={() => navigate('/chat')} className="p-2 hover:bg-gray-100 rounded-full">
+          <FiMessageCircle className="w-5 h-5" />
+        </button>
+        <h1 className="font-semibold text-lg">Сообщество</h1>
+        <button onClick={() => setShowNotifications(true)} className="p-2 hover:bg-gray-100 rounded-full relative">
+          <FiBell className="w-5 h-5" />
+          <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
+        </button>
+      </div>
+
+      <div className="p-4 space-y-4">
+        {mockReviews.map((review) => (
+          <div key={review.id} className="bg-white rounded-2xl p-4 shadow-sm">
+            <div className="flex items-center gap-3 mb-3 cursor-pointer" onClick={() => navigate(`/user/${review.id_user}`)}>
+              <div className="w-10 h-10 bg-blue-500 rounded-lg" />
+              <div className="flex-1"><p className="font-medium text-sm">{review.user_name}</p></div>
+              <span className="px-3 py-1 border border-blue-500 text-blue-500 rounded-full text-xs font-medium">{review.user_rating} птср</span>
+            </div>
+            <div className="bg-gray-100 rounded-xl h-40 flex items-center justify-center mb-3">
+              <FiStar className="w-8 h-8 text-gray-300" />
+            </div>
+            <p className="text-xs text-gray-400 mb-1">{review.created_at}</p>
+            <p className="font-medium text-sm mb-1">{review.place_name}</p>
+            <div className="flex mb-2">{renderStars(review.rating)}</div>
+            <p className="text-sm text-gray-700 mb-3">{review.text}</p>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <button className="flex items-center gap-1 text-gray-500"><FiThumbsUp className="w-4 h-4" /><span className="text-sm">{review.like}</span></button>
+                <button className="flex items-center gap-1 text-gray-500"><FiThumbsDown className="w-4 h-4" /><span className="text-sm">{review.dislike}</span></button>
+              </div>
+              <button className="px-4 py-2 border border-gray-300 rounded-full text-sm font-medium">К объекту</button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {showNotifications && (
+        <div className="fixed inset-0 z-50 bg-white flex flex-col">
+          <div className="flex items-center justify-between p-4 border-b">
+            <button onClick={() => setShowNotifications(false)} className="p-2 hover:bg-gray-100 rounded-full"><FiX className="w-5 h-5" /></button>
+            <h3 className="font-semibold text-lg">Уведомления</h3>
+            <button className="p-2 hover:bg-gray-100 rounded-full"><FiCheck className="w-5 h-5 text-gray-500" /></button>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            {mockNotifications.map((n) => (
+              <div key={n.id} className="p-4 border-b hover:bg-gray-50">
+                <div className="flex gap-3">
+                  <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center flex-shrink-0">{getNotificationIcon(n.type)}</div>
+                  <div>
+                    <p className={`font-medium text-sm ${n.type === 'warning' ? 'text-red-600' : ''}`}>{n.title}</p>
+                    <p className="text-sm text-gray-600 mt-1">{n.message}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <BottomNav />
+    </div>
+  );
+};
+
+export default CommunityPage;
+=======
 import { Search, UserPlus, Users, MessageCircle, Bell } from 'lucide-react';
 import { useStore } from '../store';
 
@@ -179,3 +279,4 @@ export default function CommunityPage() {
     </div>
   );
 }
+>>>>>>> aa80096d1e1cd0a3c22ab9abec960d40bad68eaa

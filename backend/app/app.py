@@ -12,6 +12,7 @@ import os
 from db.map import get_all_places, add_place, get_all_types, get_place, search_places, update_place
 from db.map import get_all_places, add_place, get_all_types, get_place
 from db.user import create_user, login_user, add_review, get_all_users, get_user_by_id, delete_review, set_review_rank, update_user
+from db.user import create_user, login_user, add_review, get_all_users, get_user_by_id, delete_review, set_review_rank, add_follow, get_followed_reviews
 from s3_client import upload_photo
 from db.map import get_all_places, add_place, get_all_types, get_place
 from db.user import create_user, login_user, add_review, get_all_users, get_user_by_id, delete_review
@@ -89,6 +90,7 @@ class reviewData(BaseModel):
     review_photos: List[str] = []
     like: Optional[int] = 0
     dislike: Optional[int] = 0
+    rating: Optional[int] = None
 
 
 class placeData(BaseModel):
@@ -303,6 +305,11 @@ class UserUpdateData(BaseModel):
     photo: Optional[str] = None
 
 
+class FollowData(BaseModel):
+    user_id: int
+    follow_id: int
+
+
 @user_router.post("/create")
 async def create_user_h(data: UserCreateData) -> dict:
     """Создает нового пользователя"""
@@ -370,10 +377,10 @@ async def update_user_h(data: UserUpdateData):
     """Обновляет информацию о пользователе"""
     user_data = data.dict()
     user_id = user_data.pop('user_id')  # Извлекаем user_id из данных
-    
+
     # Удаляем None значения для частичных обновлений
     user_data = {k: v for k, v in user_data.items() if v is not None}
-    
+
     result = await update_user(user_id, user_data)
     if not result:
         raise HTTPException(status_code=400, detail="User not found or update failed")
@@ -381,6 +388,23 @@ async def update_user_h(data: UserUpdateData):
 
 
 app.include_router(user_router, prefix="/users", tags=["user"])
+@user_router.post("/follow/")
+async def add_follow_h(data: FollowData):
+    """Подписывает пользователя user_id на пользователя follow_id"""
+    result = await add_follow(data.user_id, data.follow_id)
+    if not result:
+        raise HTTPException(status_code=400, detail="Failed to add follow. User may not exist, already following, or trying to follow self")
+    return {"status": "ok"}
+
+
+@user_router.get("/follow/{user_id}", response_model=List[reviewData])
+async def get_followed_reviews_h(user_id: int):
+    """Возвращает список отзывов от пользователей, на которых подписан user_id, отсортированные по id отзыва"""
+    reviews = await get_followed_reviews(user_id)
+    return reviews
+
+
+app.include_router(user_router, prefix="/user", tags=["user"])
 
 # Review rank router
 review_router = APIRouter()

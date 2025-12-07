@@ -227,7 +227,7 @@ LEFT JOIN sport_type st ON st.id = p.sporttype WHERE p.id = %s;
             ads.append(ad)
 
         query_review = sql.SQL(
-            """SELECT id, iduser, (SELECT users.name from users where users.id = reviews.iduser), idplace, text 
+            """SELECT id, iduser, (SELECT users.name from users where users.id = reviews.iduser), idplace, text, rating 
             from reviews where idplace=%s"""
 
         )
@@ -267,6 +267,7 @@ LEFT JOIN sport_type st ON st.id = p.sporttype WHERE p.id = %s;
                 "review_photos": review_photos,
                 "like": like_count,
                 "dislike": dislike_count,
+                "rating": row_r[5],
             }
             reviews.append(review)
 

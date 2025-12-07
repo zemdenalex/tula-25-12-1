@@ -157,6 +157,11 @@ CREATE TABLE IF NOT EXISTS users_photos (
     url varchar
 );
 
+CREATE TABLE IF NOT EXISTS follow (
+    user_id int,
+    follow_id int
+);
+
 """)
 
         cur.execute(create)
@@ -213,7 +218,7 @@ def migration_down():
     conn = db_connection()
     cur = conn.cursor()
     try:
-        drop = sql.SQL("""DROP TABLE IF EXISTS admins, places, places_type, product,
+        drop = sql.SQL("""DROP TABLE IF EXISTS follow, admins, places, places_type, product,
                             product_type, reklama, reklama_type, reviews, reviews_photo, reviews_ranks, sport_type, sport_interfaces,
                             sport_interfaces_place, food_type, users, places_photos, users_photos;""")
 

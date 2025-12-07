@@ -446,3 +446,127 @@ async def set_review_rank(user_id: int, review_id: int, like: bool = None, disli
             connection.close()
             logger.info('Database connection closed.')
 
+
+async def add_follow(user_id: int, follow_id: int) -> bool:
+    """Добавляет подписку пользователя user_id на пользователя follow_id. Возвращает True при успехе, False при ошибке"""
+    connection = db_connection()
+    cursor = connection.cursor()
+
+    try:
+        # Проверяем, что оба пользователя существуют
+        check_user = sql.SQL("SELECT id FROM users WHERE id = %s")
+        cursor.execute(check_user, (user_id,))
+        if not cursor.fetchone():
+            return False
+
+        cursor.execute(check_user, (follow_id,))
+        if not cursor.fetchone():
+            return False
+
+        # Проверяем, что пользователь не пытается подписаться на самого себя
+        if user_id == follow_id:
+            return False
+
+        # Проверяем, не подписан ли уже
+        check_follow = sql.SQL("""
+            SELECT user_id FROM follow WHERE user_id = %s AND follow_id = %s
+        """)
+        cursor.execute(check_follow, (user_id, follow_id,))
+        if cursor.fetchone():
+            return True  # Уже подписан
+
+        # Добавляем подписку
+        query = sql.SQL("""
+            INSERT INTO follow (user_id, follow_id)
+            VALUES (%s, %s)
+        """)
+        cursor.execute(query, (user_id, follow_id,))
+        
+        connection.commit()
+        return True
+
+    except (Exception, psycopg2.DatabaseError) as error:
+        logger.error(error)
+        connection.rollback()
+        return False
+    finally:
+        if connection:
+            cursor.close()
+            connection.close()
+            logger.info('Database connection closed.')
+
+
+async def get_followed_reviews(user_id: int) -> list:
+    """Возвращает список отзывов от пользователей, на которых подписан user_id, отсортированные по id отзыва"""
+    connection = db_connection()
+    cursor = connection.cursor()
+
+    try:
+        # Получаем все отзывы от пользователей, на которых подписан user_id
+        query = sql.SQL("""
+            SELECT 
+                r.id,
+                r.idUser,
+                u.name,
+                r.idPlace,
+                r.text,
+                r.rating
+            FROM reviews r
+            INNER JOIN follow f ON r.idUser = f.follow_id
+            INNER JOIN users u ON r.idUser = u.id
+            WHERE f.user_id = %s
+            ORDER BY r.id
+        """)
+        cursor.execute(query, (user_id,))
+        
+        rows = cursor.fetchall()
+        reviews = []
+        
+        for row in rows:
+            review_id = row[0]
+            
+            # Получаем фото для этого отзыва
+            query_photos = sql.SQL("""
+                SELECT url FROM reviews_photo WHERE review_id = %s
+            """)
+            cursor.execute(query_photos, (review_id,))
+            rows_photos = cursor.fetchall()
+            review_photos = [row_photo[0] for row_photo in rows_photos]
+            
+            # Получаем количество лайков и дизлайков
+            query_ranks = sql.SQL("""
+                SELECT 
+                    COUNT(*) FILTER (WHERE "like" = true) as like_count,
+                    COUNT(*) FILTER (WHERE dislike = true) as dislike_count
+                FROM reviews_ranks 
+                WHERE review_id = %s
+            """)
+            cursor.execute(query_ranks, (review_id,))
+            ranks_row = cursor.fetchone()
+            like_count = ranks_row[0] if ranks_row else 0
+            dislike_count = ranks_row[1] if ranks_row else 0
+            
+            review = {
+                "id": review_id,
+                "id_user": row[1],
+                "user_name": row[2],
+                "id_place": row[3],
+                "text": row[4],
+                "rating": row[5],
+                "review_photos": review_photos,
+                "like": like_count,
+                "dislike": dislike_count,
+            }
+            reviews.append(review)
+        
+        return reviews
+
+    except (Exception, psycopg2.DatabaseError) as error:
+        logger.error(error)
+        return []
+    finally:
+        if connection:
+            cursor.close()
+            connection.close()
+            logger.info('Database connection closed.')
+

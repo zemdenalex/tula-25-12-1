@@ -101,7 +101,11 @@ interface AppState {
   places: Place[];
   selectedPlace: Place | null;
   isLoadingPlaces: boolean;
+  isLoadingMorePlaces: boolean;
   placesError: string | null;
+  hasMorePlaces: boolean;
+  currentPage: number;
+  paginationLimit: number;
   
   // User
   user: User | null;
@@ -119,8 +123,10 @@ interface AppState {
   filters: PlaceFilters;
   
   // Actions - Places
-  fetchPlaces: () => Promise<void>;
-  fetchPlacesWithFilters: (filters: PlaceFilters) => Promise<void>;
+  fetchPlaces: (reset?: boolean) => Promise<void>;
+  fetchMorePlaces: () => Promise<void>;
+  fetchPlacesWithFilters: (filters: PlaceFilters, reset?: boolean) => Promise<void>;
+  fetchMorePlacesWithFilters: (filters: PlaceFilters) => Promise<void>;
   fetchPlaceById: (id: number) => Promise<Place | null>;
   setSelectedPlace: (place: Place | null) => void;
   addPlace: (data: {
@@ -168,7 +174,11 @@ export const useStore = create<AppState>((set, get) => ({
   places: [],
   selectedPlace: null,
   isLoadingPlaces: false,
+  isLoadingMorePlaces: false,
   placesError: null,
+  hasMorePlaces: true,
+  currentPage: 1,
+  paginationLimit: 10,
   
   user: null,
   isAuthenticated: false,
@@ -187,33 +197,81 @@ export const useStore = create<AppState>((set, get) => ({
   },
   
     // Place actions
-  fetchPlaces: async () => {
+  fetchPlaces: async (reset = true) => {
     // Don't fetch if already loading
     if (get().isLoadingPlaces) {
       console.log('Already loading places, skipping...');
       return;
     }
     
-    set({ isLoadingPlaces: true, placesError: null });
+    const limit = get().paginationLimit;
+    const page = reset ? 1 : get().currentPage;
+    const offset = limit;
+    
+    set({ isLoadingPlaces: true, placesError: null, currentPage: page });
     try {
-      const response = await api.get<Place[]>('/place/');
-      console.log('Fetched places:', response.data?.length || 0);
-      set({ places: response.data || [], isLoadingPlaces: false });
+      const params = new URLSearchParams();
+      params.append('limit', String(limit));
+      params.append('offset', String(offset));
+      params.append('page', String(reset ? 1 : page));
+      const response = await api.get<Place[]>(`/place/?${params.toString()}`);
+      const newPlaces = response.data || [];
+      console.log('Fetched places:', newPlaces.length);
+      
+      set({ 
+        places: reset ? newPlaces : [...get().places, ...newPlaces],
+        isLoadingPlaces: false,
+        hasMorePlaces: newPlaces.length === limit,
+        currentPage: page
+      });
     } catch (error: any) {
       console.error('Failed to fetch places:', error);
-      // DON'T overwrite places if we already have data
       const currentPlaces = get().places;
       set({ 
         placesError: error.message || 'Failed to fetch places', 
         isLoadingPlaces: false,
-        // Keep existing places if we have them
-        places: currentPlaces.length > 0 ? currentPlaces : []
+        places: reset ? [] : currentPlaces
       });
     }
   },
   
-  fetchPlacesWithFilters: async (filters: PlaceFilters) => {
-    set({ isLoadingPlaces: true, placesError: null });
+  fetchMorePlaces: async () => {
+    const state = get();
+    if (state.isLoadingMorePlaces || !state.hasMorePlaces || state.isLoadingPlaces) {
+      return;
+    }
+    
+    set({ isLoadingMorePlaces: true });
+    const nextPage = state.currentPage + 1;
+    const limit = state.paginationLimit;
+    const offset = limit;
+    
+    try {
+      const params = new URLSearchParams();
+      params.append('limit', String(limit));
+      params.append('offset', String(offset));
+      params.append('page', String(nextPage));
+      const response = await api.get<Place[]>(`/place/?${params.toString()}`);
+      const newPlaces = response.data || [];
+      
+      set({ 
+        places: [...state.places, ...newPlaces],
+        isLoadingMorePlaces: false,
+        hasMorePlaces: newPlaces.length === limit,
+        currentPage: nextPage
+      });
+    } catch (error: any) {
+      console.error('Failed to fetch more places:', error);
+      set({ isLoadingMorePlaces: false });
+    }
+  },
+  
+  fetchPlacesWithFilters: async (filters: PlaceFilters, reset = true) => {
+    const limit = get().paginationLimit;
+    const page = reset ? 1 : get().currentPage;
+    const offset = limit;
+    
+    set({ isLoadingPlaces: true, placesError: null, currentPage: page });
     try {
       const params = new URLSearchParams();
       
@@ -235,15 +293,77 @@ export const useStore = create<AppState>((set, get) => ({
         filters.has_ads_type.forEach(id => params.append('has_ads_type', String(id)));
       }
       
+      params.append('limit', String(limit));
+      params.append('offset', String(offset));
+      params.append('page', String(reset ? 1 : page));
+      
       const response = await api.get<Place[]>(`/place/search?${params.toString()}`);
-      set({ places: response.data || [], isLoadingPlaces: false });
+      const newPlaces = response.data || [];
+      
+      set({ 
+        places: reset ? newPlaces : [...get().places, ...newPlaces],
+        isLoadingPlaces: false,
+        hasMorePlaces: newPlaces.length === limit,
+        currentPage: page
+      });
     } catch (error: any) {
       console.error('Failed to fetch places with filters:', error);
       set({ 
         placesError: error.message || 'Failed to fetch places', 
         isLoadingPlaces: false,
-        places: []
+        places: reset ? [] : get().places
       });
+    }
+  },
+  
+  fetchMorePlacesWithFilters: async (filters: PlaceFilters) => {
+    const state = get();
+    if (state.isLoadingMorePlaces || !state.hasMorePlaces || state.isLoadingPlaces) {
+      return;
+    }
+    
+    set({ isLoadingMorePlaces: true });
+    const nextPage = state.currentPage + 1;
+    const limit = state.paginationLimit;
+    const offset = limit;
+    
+    try {
+      const params = new URLSearchParams();
+      
+      if (filters.place_type != null) params.append('place_type', String(filters.place_type));
+      if (filters.is_alcohol != null) params.append('is_alcohol', String(filters.is_alcohol));
+      if (filters.is_health != null) params.append('is_health', String(filters.is_health));
+      if (filters.is_nosmoking != null) params.append('is_nosmoking', String(filters.is_nosmoking));
+      if (filters.is_smoke != null) params.append('is_smoke', String(filters.is_smoke));
+      if (filters.max_distance != null) params.append('max_distance', String(filters.max_distance));
+      if (filters.is_moderated != null) params.append('is_moderated', String(filters.is_moderated));
+      
+      if (filters.has_product_type) {
+        filters.has_product_type.forEach(id => params.append('has_product_type', String(id)));
+      }
+      if (filters.has_equipment_type) {
+        filters.has_equipment_type.forEach(id => params.append('has_equipment_type', String(id)));
+      }
+      if (filters.has_ads_type) {
+        filters.has_ads_type.forEach(id => params.append('has_ads_type', String(id)));
+      }
+      
+      params.append('limit', String(limit));
+      params.append('offset', String(offset));
+      params.append('page', String(nextPage));
+      
+      const response = await api.get<Place[]>(`/place/search?${params.toString()}`);
+      const newPlaces = response.data || [];
+      
+      set({ 
+        places: [...state.places, ...newPlaces],
+        isLoadingMorePlaces: false,
+        hasMorePlaces: newPlaces.length === limit,
+        currentPage: nextPage
+      });
+    } catch (error: any) {
+      console.error('Failed to fetch more places with filters:', error);
+      set({ isLoadingMorePlaces: false });
     }
   },
   

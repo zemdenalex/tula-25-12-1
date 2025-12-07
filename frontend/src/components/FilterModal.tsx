@@ -15,7 +15,7 @@ const FilterModal: React.FC<FilterModalProps> = ({ isOpen, onClose }) => {
 
   const handleApply = () => {
     setFilters(localFilters);
-    fetchPlacesWithFilters(localFilters);
+    fetchPlacesWithFilters(localFilters, true); // reset = true to start from page 1
     onClose();
   };
 

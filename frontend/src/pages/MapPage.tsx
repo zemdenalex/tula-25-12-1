@@ -28,12 +28,14 @@ const MapPage: React.FC<MapPageProps> = ({ onAddPlace }) => {
     setFilterModalOpen,
     searchQuery,
     setSearchQuery,
-    filters
+    filters,
+    fetchPlacesWithFilters
   } = useStore();
 
   const [bottomSheetOpen, setBottomSheetOpen] = useState(false);
 
-  // Filter places based on search query
+  // Note: Search is handled client-side for now, but could be moved to server-side
+  // For infinite scroll with search, we'd need to implement server-side search
   const filteredPlaces = useMemo(() => {
     if (!searchQuery.trim()) return places;
     
@@ -145,6 +147,7 @@ const MapPage: React.FC<MapPageProps> = ({ onAddPlace }) => {
           <ListView 
             places={filteredPlaces} 
             onPlaceSelect={handlePlaceSelect}
+            useFilters={Object.keys(filters).length > 0 || searchQuery.trim().length > 0}
           />
         )}
       </div>

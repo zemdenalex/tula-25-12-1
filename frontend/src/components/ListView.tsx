@@ -1,15 +1,58 @@
-import React from 'react';
-import { Place } from '../store';
+import React, { useEffect, useRef, useCallback } from 'react';
+import { Place, useStore } from '../store';
 import { StarIcon, MapPinIcon } from '@heroicons/react/24/solid';
 import { HeartIcon } from '@heroicons/react/24/outline';
 
 interface ListViewProps {
   places: Place[];
   onPlaceSelect: (place: Place) => void;
+  useFilters?: boolean;
 }
 
-const ListView: React.FC<ListViewProps> = ({ places, onPlaceSelect }) => {
-  if (places.length === 0) {
+const ListView: React.FC<ListViewProps> = ({ places, onPlaceSelect, useFilters = false }) => {
+  const { 
+    isLoadingMorePlaces, 
+    hasMorePlaces, 
+    fetchMorePlaces, 
+    fetchMorePlacesWithFilters,
+    filters 
+  } = useStore();
+  
+  const observerTarget = useRef<HTMLDivElement>(null);
+
+  const loadMore = useCallback(() => {
+    if (!isLoadingMorePlaces && hasMorePlaces) {
+      if (useFilters) {
+        fetchMorePlacesWithFilters(filters);
+      } else {
+        fetchMorePlaces();
+      }
+    }
+  }, [isLoadingMorePlaces, hasMorePlaces, useFilters, fetchMorePlaces, fetchMorePlacesWithFilters, filters]);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMorePlaces && !isLoadingMorePlaces) {
+          loadMore();
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    const currentTarget = observerTarget.current;
+    if (currentTarget) {
+      observer.observe(currentTarget);
+    }
+
+    return () => {
+      if (currentTarget) {
+        observer.unobserve(currentTarget);
+      }
+    };
+  }, [loadMore, hasMorePlaces, isLoadingMorePlaces]);
+
+  if (places.length === 0 && !isLoadingMorePlaces) {
     return (
       <div className="h-full flex items-center justify-center bg-gray-50 pt-20">
         <div className="text-center">
@@ -27,6 +70,18 @@ const ListView: React.FC<ListViewProps> = ({ places, onPlaceSelect }) => {
         {places.map((place) => (
           <PlaceCard key={place.id} place={place} onClick={() => onPlaceSelect(place)} />
         ))}
+        
+        {/* Infinite scroll trigger */}
+        {hasMorePlaces && (
+          <div ref={observerTarget} className="py-4 flex justify-center">
+            {isLoadingMorePlaces && (
+              <div className="flex items-center gap-2 text-gray-500">
+                <div className="animate-spin w-5 h-5 border-2 border-gray-400 border-t-transparent rounded-full"></div>
+                <span>Загрузка...</span>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

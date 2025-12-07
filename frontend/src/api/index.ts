@@ -27,22 +27,36 @@ const handleResponse = <T>(promise: Promise<{ data: T }>): Promise<T> => {
     });
 };
 
+export interface PaginationParams {
+  limit?: number;
+  offset?: number;
+  page?: number;
+}
+
 export const placesApi = {
-  getAll: (): Promise<Place[]> => {
-    return handleResponse(api.get<Place[]>('/place/'));
+  getAll: (pagination?: PaginationParams): Promise<Place[]> => {
+    const params = new URLSearchParams();
+    if (pagination?.limit !== undefined) params.append('limit', String(pagination.limit));
+    if (pagination?.offset !== undefined) params.append('offset', String(pagination.offset));
+    if (pagination?.page !== undefined) params.append('page', String(pagination.page));
+    const queryString = params.toString();
+    return handleResponse(api.get<Place[]>(`/place/${queryString ? `?${queryString}` : ''}`));
   },
 
   getById: (id: number): Promise<Place> => {
     return handleResponse(api.get<Place>(`/place/point/${id}`));
   },
 
-  search: (filters: SearchFilters): Promise<Place[]> => {
+  search: (filters: SearchFilters, pagination?: PaginationParams): Promise<Place[]> => {
     const params = new URLSearchParams();
     Object.entries(filters).forEach(([key, value]) => {
       if (value !== undefined && value !== null) {
         params.append(key, String(value));
       }
     });
+    if (pagination?.limit !== undefined) params.append('limit', String(pagination.limit));
+    if (pagination?.offset !== undefined) params.append('offset', String(pagination.offset));
+    if (pagination?.page !== undefined) params.append('page', String(pagination.page));
     return handleResponse(api.get<Place[]>(`/place/search?${params.toString()}`));
   },
 
@@ -72,8 +86,13 @@ export const usersApi = {
     return handleResponse(api.get<User>(`/user/${id}`));
   },
 
-  getAll: (): Promise<User[]> => {
-    return handleResponse(api.get<User[]>('/user/'));
+  getAll: (pagination?: PaginationParams): Promise<User[]> => {
+    const params = new URLSearchParams();
+    if (pagination?.limit !== undefined) params.append('limit', String(pagination.limit));
+    if (pagination?.offset !== undefined) params.append('offset', String(pagination.offset));
+    if (pagination?.page !== undefined) params.append('page', String(pagination.page));
+    const queryString = params.toString();
+    return handleResponse(api.get<User[]>(`/user/${queryString ? `?${queryString}` : ''}`));
   },
 };
 

@@ -170,7 +170,7 @@ export const useStore = create<AppState>((set, get) => ({
   placesError: null,
   hasMorePlaces: true,
   currentPage: 1,
-  paginationLimit: 10,
+  paginationLimit: 50,
   
   user: null,
   isAuthenticated: false,
@@ -183,8 +183,7 @@ export const useStore = create<AppState>((set, get) => ({
   filterModalOpen: false,
   searchQuery: '',
   filters: {
-    max_distance: 5,
-    is_moderated: true,
+    max_distance: 100,
   },
 
   fetchPlaces: async (reset = true) => {
@@ -544,8 +543,7 @@ export const useStore = create<AppState>((set, get) => ({
   clearFilters: () => {
     set({ 
       filters: {
-        max_distance: 5,
-        is_moderated: true,
+        max_distance: 100,
       }
     });
   },

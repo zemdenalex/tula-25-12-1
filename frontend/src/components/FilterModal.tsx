@@ -11,8 +11,6 @@ interface FilterModalProps {
 const FilterModal: React.FC<FilterModalProps> = ({ isOpen, onClose }) => {
   const { filters, setFilters, clearFilters, fetchPlacesWithFilters } = useStore();
   const [localFilters, setLocalFilters] = useState<PlaceFilters>(filters);
-  const [minRating, setMinRating] = useState<number>(0);
-  const [usefulnessRating, setUsefulnessRating] = useState<string[]>([]);
 
   useEffect(() => {
     if (isOpen) {
@@ -44,12 +42,10 @@ const FilterModal: React.FC<FilterModalProps> = ({ isOpen, onClose }) => {
 
   const handleReset = () => {
     const defaultFilters: PlaceFilters = {
-      max_distance: 5,
-      is_moderated: true,
+      max_distance: 100,
+      is_moderated: null,
     };
     setLocalFilters(defaultFilters);
-    setMinRating(0);
-    setUsefulnessRating([]);
     clearFilters();
   };
 
@@ -59,15 +55,9 @@ const FilterModal: React.FC<FilterModalProps> = ({ isOpen, onClose }) => {
     }
   };
 
-  const toggleUsefulnessRating = (rating: string) => {
-    setUsefulnessRating(prev => 
-      prev.includes(rating) 
-        ? prev.filter(r => r !== rating)
-        : [...prev, rating]
-    );
-  };
-
   if (!isOpen) return null;
+
+  const distanceValue = localFilters.max_distance || 100;
 
   return (
     <div className="fixed inset-0 z-[100]" onClick={handleBackdropClick}>
@@ -96,7 +86,7 @@ const FilterModal: React.FC<FilterModalProps> = ({ isOpen, onClose }) => {
 
           <div className="flex-1 overflow-y-auto px-4 py-6 space-y-8">
             <div>
-              <h3 className="font-semibold text-gray-900 mb-3">Категории</h3>
+              <h3 className="font-semibold text-gray-900 mb-3">Тип места</h3>
               <div className="relative">
                 <select
                   value={localFilters.place_type || ''}
@@ -106,142 +96,96 @@ const FilterModal: React.FC<FilterModalProps> = ({ isOpen, onClose }) => {
                   })}
                   className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl appearance-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none cursor-pointer"
                 >
-                  <option value="">Dropdown</option>
+                  <option value="">Все типы</option>
                   <option value="1">Спортзал</option>
-                  <option value="2">Кафе</option>
+                  <option value="2">Кафе/Ресторан</option>
                   <option value="3">Парк</option>
                   <option value="4">Магазин</option>
                   <option value="5">Бассейн</option>
                   <option value="6">Стадион</option>
+                  <option value="7">Медицина</option>
                 </select>
                 <ChevronDownIcon className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
               </div>
             </div>
 
             <div>
-              <h3 className="font-semibold text-gray-900 mb-3">Особенности</h3>
+              <h3 className="font-semibold text-gray-900 mb-3">Характеристики</h3>
               <div className="space-y-4">
                 <label className="flex items-center cursor-pointer group">
                   <input
                     type="checkbox"
-                    checked={localFilters.is_nosmoking || false}
+                    checked={localFilters.is_health === true}
                     onChange={(e) => setLocalFilters({
                       ...localFilters,
-                      is_nosmoking: e.target.checked || null
+                      is_health: e.target.checked ? true : null
                     })}
                     className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                   />
-                  <span className="ml-3 text-gray-700 group-hover:text-gray-900">Запрещено курение</span>
+                  <span className="ml-3 text-gray-700 group-hover:text-gray-900">💚 Полезно для здоровья</span>
                 </label>
                 <label className="flex items-center cursor-pointer group">
                   <input
                     type="checkbox"
-                    checked={localFilters.is_health || false}
+                    checked={localFilters.is_nosmoking === true}
                     onChange={(e) => setLocalFilters({
                       ...localFilters,
-                      is_health: e.target.checked || null
+                      is_nosmoking: e.target.checked ? true : null
                     })}
                     className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                   />
-                  <span className="ml-3 text-gray-700 group-hover:text-gray-900">Полезно для здоровья</span>
+                  <span className="ml-3 text-gray-700 group-hover:text-gray-900">🚭 Запрещено курение</span>
                 </label>
                 <label className="flex items-center cursor-pointer group">
                   <input
                     type="checkbox"
-                    checked={localFilters.is_smoke || false}
+                    checked={localFilters.is_smoke === true}
                     onChange={(e) => setLocalFilters({
                       ...localFilters,
-                      is_smoke: e.target.checked || null
+                      is_smoke: e.target.checked ? true : null
                     })}
                     className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                   />
-                  <span className="ml-3 text-gray-700 group-hover:text-gray-900">Табачные изделия</span>
+                  <span className="ml-3 text-gray-700 group-hover:text-gray-900">🚬 Табачные изделия</span>
                 </label>
                 <label className="flex items-center cursor-pointer group">
                   <input
                     type="checkbox"
-                    checked={localFilters.is_alcohol || false}
+                    checked={localFilters.is_alcohol === true}
                     onChange={(e) => setLocalFilters({
                       ...localFilters,
-                      is_alcohol: e.target.checked || null
+                      is_alcohol: e.target.checked ? true : null
                     })}
                     className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                   />
-                  <span className="ml-3 text-gray-700 group-hover:text-gray-900">Алкоголь</span>
+                  <span className="ml-3 text-gray-700 group-hover:text-gray-900">🍺 Продажа алкоголя</span>
                 </label>
-              </div>
-            </div>
-
-            <div>
-              <h3 className="font-semibold text-gray-900 mb-3">Пользовательский рейтинг</h3>
-              <div className="space-y-3">
-                {[1, 2, 3, 4, 5].map((rating) => (
-                  <label key={rating} className="flex items-center cursor-pointer group">
-                    <input
-                      type="radio"
-                      name="rating"
-                      checked={minRating === rating}
-                      onChange={() => setMinRating(rating)}
-                      className="w-5 h-5 border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                    />
-                    <span className="ml-3 flex items-center gap-2">
-                      <span className="text-gray-700 group-hover:text-gray-900">
-                        {rating} {rating === 1 ? 'звезда' : rating < 5 ? 'звезды' : 'звезд'}
-                      </span>
-                      <div className="flex">
-                        {[1, 2, 3, 4, 5].map((star) => (
-                          <StarIcon
-                            key={star}
-                            className={`w-4 h-4 ${star <= rating ? 'text-amber-400' : 'text-gray-200'}`}
-                          />
-                        ))}
-                      </div>
-                    </span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <h3 className="font-semibold text-gray-900 mb-3">Рейтинг полезности</h3>
-              <div className="space-y-4">
-                {['Отличное', 'Хорошее', 'Неплохое', 'Плохое', 'Ужасное'].map((rating) => (
-                  <label key={rating} className="flex items-center cursor-pointer group">
-                    <input
-                      type="checkbox"
-                      checked={usefulnessRating.includes(rating)}
-                      onChange={() => toggleUsefulnessRating(rating)}
-                      className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                    />
-                    <span className="ml-3 text-gray-700 group-hover:text-gray-900">{rating}</span>
-                  </label>
-                ))}
               </div>
             </div>
 
             <div>
               <h3 className="font-semibold text-gray-900 mb-3">
-                Расстояние до центра: <span className="text-blue-600">{localFilters.max_distance || 5} км</span>
+                Расстояние до центра: <span className="text-blue-600">{distanceValue} км</span>
               </h3>
               <div className="px-1">
                 <input
                   type="range"
                   min="1"
-                  max="20"
-                  value={localFilters.max_distance || 5}
+                  max="1000"
+                  value={distanceValue}
                   onChange={(e) => setLocalFilters({
                     ...localFilters,
                     max_distance: Number(e.target.value)
                   })}
                   className="w-full h-2 rounded-lg appearance-none cursor-pointer"
                   style={{
-                    background: `linear-gradient(to right, #2563eb 0%, #2563eb ${((localFilters.max_distance || 5) - 1) / 19 * 100}%, #e5e7eb ${((localFilters.max_distance || 5) - 1) / 19 * 100}%, #e5e7eb 100%)`
+                    background: `linear-gradient(to right, #2563eb 0%, #2563eb ${((distanceValue - 1) / 999) * 100}%, #e5e7eb ${((distanceValue - 1) / 999) * 100}%, #e5e7eb 100%)`
                   }}
                 />
               </div>
               <div className="flex justify-between text-sm text-gray-500 mt-2">
                 <span>1 км</span>
-                <span>20 км</span>
+                <span>1000 км</span>
               </div>
             </div>
 
@@ -249,14 +193,14 @@ const FilterModal: React.FC<FilterModalProps> = ({ isOpen, onClose }) => {
               <label className="flex items-center cursor-pointer group">
                 <input
                   type="checkbox"
-                  checked={localFilters.is_moderated || false}
+                  checked={localFilters.is_moderated === true}
                   onChange={(e) => setLocalFilters({
                     ...localFilters,
-                    is_moderated: e.target.checked || null
+                    is_moderated: e.target.checked ? true : null
                   })}
                   className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                 />
-                <span className="ml-3 text-gray-700 group-hover:text-gray-900 font-medium">Только проверенные места</span>
+                <span className="ml-3 text-gray-700 group-hover:text-gray-900 font-medium">✓ Только проверенные места</span>
               </label>
             </div>
           </div>
